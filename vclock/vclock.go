@@ -107,3 +107,36 @@ func Equal(a, b VClock) bool {
 	}
 	return true
 }
+
+// Is A is a descendant of B?
+func Descends(a, b VClock) bool {
+	cmp := Compare(a, b)
+	switch {
+		case cmp == 1: return true;
+		case cmp == 0 && Equal(a, b): return true
+	}
+	// if cmp == 1 || (cmp == 0 && Equal(a, b)) { return true }
+	return false
+}
+
+func MergeSelf(clocks []VClock, self string) VClock {
+	clock := Merge(clocks)
+	clock.Increment(self)
+	return clock
+}
+
+func Merge(clocks []VClock) VClock {
+	max := func (a,b int) int { if (a > b) {return a}; return b }
+	max64 := func (a,b int64) int64 { if (a > b) {return a}; return b }
+	acc := Fresh()
+	for _, clock := range(clocks) {
+		for client, entry := range(clock) {
+			acc_client := acc[client]
+			acc_client.counter = max(acc_client.counter, entry.counter)
+			acc_client.timestamp = max64(acc_client.timestamp, entry.timestamp)
+			acc[client] = acc_client
+		}
+	}
+
+	return acc
+}
