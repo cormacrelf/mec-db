@@ -62,3 +62,48 @@ func (vc VClock) String() string {
 	return str
 }
 
+// Comparing VClocks
+
+func fieldGT(field string, a, b VClock) int {
+	if a[field].counter > b[field].counter { return 1 }
+	return 0
+}
+
+// Compares two VClocks.
+// If A is a descendant of B, returns 1.
+// If B is a descendant of A, returns -1.
+// If A == B, or A and B have split from a common ancestor, returns 0.
+// A split history is a Riak 'sibling' case.
+func Compare (a, b VClock) int {
+	accA, accB := 0, 0
+	for f := range(a) {
+		accA += fieldGT(f, a, b)
+	}
+	for f := range(b) {
+		accB += fieldGT(f, b, a)
+	}
+
+	// No sign function in the standard library?
+	sign := func(i int) int { switch { case i<0  : return -1;
+									   case i==0 : return  0;
+									   case i>0  : return  1}
+								       return 0 }
+
+	return sign(accA) - sign(accB)
+}
+
+func Equal(a, b VClock) bool {
+	for f := range(a) {
+		switch {
+			case b[f] == Entry {}: return false;
+			case b[f].counter != a[f].counter: return false;
+		}
+	}
+	for f := range(b) {
+		switch {
+			case a[f] == Entry {}: return false;
+			case a[f].counter != a[f].counter: return false;
+		}
+	}
+	return true
+}
