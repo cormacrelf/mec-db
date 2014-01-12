@@ -39,6 +39,19 @@ func (vc *VClock) Increment(client string) {
 	(*vc)[client] = entry
 }
 
+func (vc VClock) IsValid() bool {
+	for k, v := range vc {
+		if k == "" {
+			return false
+		} else if v.counter <= 0 {
+			return false
+		} else if v.timestamp <= 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // Printing a VClock.
 
 type clientPretty struct {
