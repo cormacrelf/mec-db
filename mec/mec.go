@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 	"github.com/cormacrelf/mec-db/peers"
+	"io/ioutil"
 )
 
 // API
@@ -65,6 +66,7 @@ func main() {
 	config.BindPort = *port
 	pl := peers.Create(*port + 1)
 	config.Events = pl
+	config.LogOutput = ioutil.Discard
 	list, err := memberlist.Create(config)
 	if err != nil {
 		panic("Failed to create memberlist: " + err.Error())
