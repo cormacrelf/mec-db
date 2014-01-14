@@ -4,11 +4,6 @@ import (
 	zmq "github.com/pebbe/zmq4"
 	ml "github.com/hashicorp/memberlist"
 	"fmt"
-// 	"code.google.com/p/go-uuid/uuid"
-// 	"bytes"
-// 	"errors"
-// 	"net"
-// 	"time"
 )
 
 type PeerList struct {
