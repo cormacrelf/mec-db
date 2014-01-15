@@ -1,16 +1,14 @@
 package main
 
 import (
-	"code.google.com/p/go-uuid/uuid"
-	"flag"
 	"fmt"
 	"github.com/codegangsta/martini"
-	"github.com/hashicorp/memberlist"
+	"github.com/cormacrelf/mec-db/peers"
+	ml "github.com/hashicorp/memberlist"
 	"github.com/jmhodges/levigo"
+	"io/ioutil"
 	"net/http"
 	"time"
-	"github.com/cormacrelf/mec-db/peers"
-	"io/ioutil"
 )
 
 // API
@@ -20,6 +18,8 @@ import (
 
 var m *martini.Martini
 var db *levigo.DB
+var list *ml.Memberlist
+var pl *peers.PeerList
 
 func shake(name string) {
 	m = martini.New()
@@ -49,54 +49,66 @@ func shake(name string) {
 		panic("failed to create database")
 	}
 	m.Map(db)
+	m.Map(pl)
 }
 
-func main() {
-
-	var name = flag.String("name", uuid.New(), "choose a server name")
-	var port = flag.Int("port", 7946, "choose a port")
-	var serve = flag.Int("serve", 3000, "choose an http server port")
-	var remote = flag.Int("remote", 7946, "choose a remote")
-	var join = flag.Bool("join", false, "choose a remote")
-	flag.Parse()
-
-	config := memberlist.DefaultLocalConfig()
-	config.Name = *name
+func joinCluster(name string, port int, nodes []Node) {
+	config := ml.DefaultLocalConfig()
+	config.Name = name
 	config.BindAddr = "127.0.0.1"
-	config.BindPort = *port
-	pl := peers.Create(*port + 1)
+	config.BindPort = port
+	pl = peers.Create(port + 1, name)
+	ch := pl.Subscribe("HELLO")
 	config.Events = pl
 	config.LogOutput = ioutil.Discard
-	list, err := memberlist.Create(config)
+	list, err := ml.Create(config)
 	if err != nil {
 		panic("Failed to create memberlist: " + err.Error())
 	}
 
+	hosts := make([]string, 100)
+	for i, node := range nodes {
+		hosts[i] = fmt.Sprintf("%s:%d", node.Host, node.Port)
+	}
+
 	go func() {
-		if *join {
-			// Join an existing cluster by specifying at least one known member.
-			for {
-				_, err = list.Join([]string{fmt.Sprintf("127.0.0.1:%d", *remote)})
-				if err != nil {
-					// panic("Failed to join cluster: " + err.Error())
-					// wait a second before retrying
-					time.Sleep(1000 * time.Millisecond)
-					continue
-				} else {
-					break
-				}
+		// Join an existing cluster by specifying at least one known member.
+		for {
+			_, err := list.Join(hosts)
+			if err != nil {
+				// panic("Failed to join cluster: " + err.Error())
+				// wait a second before retrying
+				time.Sleep(1000 * time.Millisecond)
+				continue
+			} else {
+				break
 			}
 		}
 	}()
 
+	// Our little fake module that receives HELLO msgs
+	go func(ch *chan []string) {
+		for {
+			a := <-*ch
+			fmt.Printf("RECEIVED: %v\n", a[1:])
+		}
+	}(ch)
+
+}
+
+func main() {
+	config := GetConfig()
+
+	joinCluster(config.Name, config.Port, config.Node)
+
 	// m is assigned in shake()
-	shake(*name)
+	shake(config.Name)
 	// http listens on 'serve' port
-	err = http.ListenAndServe(fmt.Sprintf(":%d", *serve), m)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", config.HTTPPort), m)
 	if err != nil {
 		fmt.Printf("failed to create server")
 	} else {
-		fmt.Printf("listening on port %d", *serve)
+		fmt.Printf("listening on port %d", config.HTTPPort)
 	}
 
 	fmt.Printf("exiting?")

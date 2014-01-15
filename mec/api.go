@@ -5,6 +5,7 @@ import (
 	"net/http"
 	// "strconv"
 	"github.com/codegangsta/martini"
+	"github.com/cormacrelf/mec-db/peers"
 	"github.com/jmhodges/levigo"
 )
 
@@ -14,7 +15,8 @@ func GetRoot(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
 	return 200, "stub"
 }
 
-func Get(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
+func Get(pl *peers.PeerList, db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
+	(*pl).SendRandom(1, "HELLO", "i am a teapot")
 	key, _ := params["key"]
 	ro := levigo.NewReadOptions()
 	defer ro.Close()
@@ -27,7 +29,7 @@ func Get(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
 	return http.StatusOK, string(al)
 }
 
-func Post(db *levigo.DB, enc Encoder, params martini.Params) (int, string)   {
+func Post(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
 	key, _ := params["key"]
 	value, _ := params["value"]
 	// ro := levigo.NewReadOptions()
@@ -41,7 +43,7 @@ func Post(db *levigo.DB, enc Encoder, params martini.Params) (int, string)   {
 	}
 	return http.StatusOK, Must(enc.Encode(""))
 }
-func Put(db *levigo.DB, enc Encoder, params martini.Params) (int, string)    {
+func Put(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
 	return 200, "stub"
 }
 func Delete(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
