@@ -6,11 +6,13 @@ import (
 	"time"
 )
 
-// { "client id": { "counter": x, "timestamp": x } }
+// { "Counter": x, "Timestamp": x }
 type Entry struct {
-	counter   int
-	timestamp int64
+	Counter   int
+	Timestamp int64
 }
+
+// { "client id": { "Counter": x, "Timestamp": x } }
 type VClock map[string]Entry
 
 // Single VClock functions/methods
@@ -19,33 +21,41 @@ func now() int64 {
 	return time.Now().UnixNano()
 }
 
+// Fresh = no entries
 func Fresh() VClock {
 	return VClock{}
 }
 
+// Give us a new VClock with the given client = 1
 func New(client string) VClock {
 	return VClock{client: {1, now()}}
 }
 
+// Set a counter for the given client. Not useful for production.
 func (vc *VClock) Set(client string, counter int) {
 	var entry = Entry{counter, now()}
 	(*vc)[client] = entry
 }
 
+// Increment the given client's counter and update its timestamp
 func (vc *VClock) Increment(client string) {
 	entry := (*vc)[client]
-	entry.counter += 1
-	entry.timestamp = now()
+	entry.Counter += 1
+	entry.Timestamp = now()
 	(*vc)[client] = entry
 }
 
+// IsValid validates a clock by checking:
+// * ID is not a zero-length string
+// * Each counter > 0
+// * Each timestamp has been updated (> 0)
 func (vc VClock) IsValid() bool {
 	for k, v := range vc {
 		if k == "" {
 			return false
-		} else if v.counter <= 0 {
+		} else if v.Counter <= 0 {
 			return false
-		} else if v.timestamp <= 0 {
+		} else if v.Timestamp <= 0 {
 			return false
 		}
 	}
@@ -64,6 +74,8 @@ func (b byClient) Len() int           { return len(b) }
 func (b byClient) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
 func (b byClient) Less(i, j int) bool { return b[i].c < b[j].c }
 
+// Pretty-print formats a VClock so we can read logs and not deal with
+// excessively long timestamps
 func (vc VClock) String() string {
 	vlist := byClient{}
 	flist := [](struct {
@@ -80,7 +92,7 @@ func (vc VClock) String() string {
 			int
 		})
 		x.string = d.c
-		x.int = d.e.counter
+		x.int = d.e.Counter
 		flist = append(flist, *x)
 	}
 
@@ -91,7 +103,7 @@ func (vc VClock) String() string {
 // Comparing VClocks
 
 func fieldGT(field string, a, b VClock) int {
-	if a[field].counter > b[field].counter {
+	if a[field].Counter > b[field].Counter {
 		return 1
 	}
 	return 0
@@ -127,12 +139,15 @@ func Compare(a, b VClock) int {
 	return sign(accA) - sign(accB)
 }
 
+// Equal compares only IDs and their counters, not the times at which
+// they were updated. This is because a different server will have a
+// different clock and receive a write at a different time anyway.
 func Equal(a, b VClock) bool {
 	for f := range a {
 		switch {
 		case b[f] == Entry{}:
 			return false
-		case b[f].counter != a[f].counter:
+		case b[f].Counter != a[f].Counter:
 			return false
 		}
 	}
@@ -140,7 +155,7 @@ func Equal(a, b VClock) bool {
 		switch {
 		case a[f] == Entry{}:
 			return false
-		case a[f].counter != a[f].counter:
+		case a[f].Counter != a[f].Counter:
 			return false
 		}
 	}
@@ -148,6 +163,7 @@ func Equal(a, b VClock) bool {
 }
 
 // Is A is a descendant of B?
+// Note: if A == B, then A also descends B.
 func Descends(a, b VClock) bool {
 	cmp := Compare(a, b)
 	switch {
@@ -156,16 +172,20 @@ func Descends(a, b VClock) bool {
 	case cmp == 0 && Equal(a, b):
 		return true
 	}
-	// if cmp == 1 || (cmp == 0 && Equal(a, b)) { return true }
+	// otherwise, B descends A
 	return false
 }
 
+// Merge a list of clocks and increment own counter
 func MergeSelf(clocks []VClock, self string) VClock {
 	clock := Merge(clocks)
 	clock.Increment(self)
 	return clock
 }
 
+// Merge a list of VClocks by finding a clock that descends every one
+// of them. That means each ID's counter in the new clock will be the
+// max() of all counters for that ID in each input clock.
 func Merge(clocks []VClock) VClock {
 	max := func(a, b int) int {
 		if a > b {
@@ -183,8 +203,8 @@ func Merge(clocks []VClock) VClock {
 	for _, clock := range clocks {
 		for client, entry := range clock {
 			acc_client := acc[client]
-			acc_client.counter = max(acc_client.counter, entry.counter)
-			acc_client.timestamp = max64(acc_client.timestamp, entry.timestamp)
+			acc_client.Counter = max(acc_client.Counter, entry.Counter)
+			acc_client.Timestamp = max64(acc_client.Timestamp, entry.Timestamp)
 			acc[client] = acc_client
 		}
 	}
