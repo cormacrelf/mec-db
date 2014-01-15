@@ -6,7 +6,7 @@ import (
 	// "strconv"
 	"github.com/codegangsta/martini"
 	"github.com/cormacrelf/mec-db/peers"
-	"github.com/cormacrelf/mec-db/writer"
+	"github.com/cormacrelf/mec-db/store"
 	"github.com/jmhodges/levigo"
 )
 
@@ -29,7 +29,7 @@ func Get(pl *peers.PeerList, db *levigo.DB, enc Encoder, params martini.Params) 
 	return http.StatusOK, string(al)
 }
 
-func Post(db *levigo.DB, w *writer.Writer, enc Encoder, params martini.Params) (int, string) {
+func Post(db *levigo.DB, w *store.Store, enc Encoder, params martini.Params) (int, string) {
 	key, _ := params["key"]
 	value, _ := params["value"]
 	client, _ := params["client"]

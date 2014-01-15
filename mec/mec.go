@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/codegangsta/martini"
 	"github.com/cormacrelf/mec-db/peers"
-	"github.com/cormacrelf/mec-db/writer"
+	"github.com/cormacrelf/mec-db/store"
 	ml "github.com/hashicorp/memberlist"
 	"github.com/jmhodges/levigo"
 	"io/ioutil"
@@ -51,11 +51,11 @@ func shake(name string, root string) {
 		panic("failed to create database")
 	}
 
-	w := writer.Create(db, pl)
+	s := store.Create(db, pl)
 
 	m.Map(db)
 	m.Map(pl)
-	m.Map(w)
+	m.Map(s)
 
 }
 

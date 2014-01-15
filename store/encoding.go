@@ -1,66 +1,15 @@
-package writer
+package store
 
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
-	"github.com/cormacrelf/mec-db/peers"
 	"github.com/cormacrelf/mec-db/vclock"
-	"github.com/jmhodges/levigo"
 	"github.com/ugorji/go/codec"
 	"reflect"
 )
 
-// handles
-// - receiving node as coordinator on write
-// - writing simple PUT from coordinator node
-// - responding to PUT requests
-// - fire PUT to W nodes
-// - confirm success by examining replies
-// - actual leveldb writes
-// - VClocks at every stage
-
-type Writer struct {
-	ro *levigo.ReadOptions
-	wo *levigo.WriteOptions
-	db *levigo.DB
-	pl *peers.PeerList
-}
-
-func Create(db *levigo.DB, pl *peers.PeerList) *Writer {
-	w := Writer{
-		ro: levigo.NewReadOptions(),
-		wo: levigo.NewWriteOptions(),
-		db: db,
-		pl: pl,
-	}
-
-	// msg := []string{"random nonsense", "WRITE", "key", "value", "VClock"}
-	// msg, err := encode("key", "value", vclock.New("cormac"))
-	// fmt.Println(msg)
-	// key, value, vc, err := parse(true, msg...)
-	// fmt.Printf("%s: %s - %v - %v", key, value, vc, err)
-
-	return &w
-}
-
-func (w Writer) Listen() {
-	incoming := make(chan []string, 1000)
-	w.pl.Subscribe(incoming, "WRITE")
-	for {
-		msg := <-incoming
-		key, value, vc, err := parse(false, msg...)
-		if err != nil {
-			// handle error
-			// or just silently drop?
-		} else {
-			w.DBWrite(key, value, vc)
-		}
-	}
-}
-
 // Takes message parts and returns key, value, VClock
-func parse(naked bool, msg ...string) (string, string, vclock.VClock, error) {
+func parseMsg(naked bool, msg ...string) (string, string, vclock.VClock, error) {
 	var mh codec.MsgpackHandle
 	var vc vclock.VClock
 	mh.MapType = reflect.TypeOf(vc)
@@ -120,7 +69,7 @@ func encodeVClock(vc vclock.VClock) (string, error) {
 }
 
 // Encode message parts into sendable zeromq message
-func encode(key, value string, vc vclock.VClock) ([]string, error) {
+func encodeMsg(key, value string, vc vclock.VClock) ([]string, error) {
 	var mh codec.MsgpackHandle
 	var b []byte
 
@@ -139,12 +88,12 @@ func encode(key, value string, vc vclock.VClock) ([]string, error) {
 	return msg, nil
 }
 
-type Writable struct {
+type Storable struct {
 	value string
 	vc  vclock.VClock
 }
 
-func encodeWritable(wr Writable) ([]byte, error) {
+func encodeStorable(wr Storable) ([]byte, error) {
 	var mh codec.MsgpackHandle
 	var b []byte
 
@@ -158,48 +107,17 @@ func encodeWritable(wr Writable) ([]byte, error) {
 	return b, nil
 }
 
-func decodeWritable(data []byte) (Writable, error) {
+func decodeStorable(data []byte) (Storable, error) {
 	var mh codec.MsgpackHandle
-	var wr Writable
+	var wr Storable
 	mh.MapType = reflect.TypeOf(wr)
 
 	dec := codec.NewDecoderBytes(data, &mh)
 	err := dec.Decode(&wr)
 	if err != nil {
-		return Writable{}, errors.New("writable not decoded")
+		return Storable{}, errors.New("writable not decoded")
 	}
 
 	return wr, nil
 }
 
-func (w Writer) APIWrite(key, value, client_id, packed_vclock string) error {
-	vc, err := parseVClock(packed_vclock)
-	if err != nil {
-		// handle the bad VClock input by making a new one
-		vc = vclock.Fresh()
-	}
-	vc.Increment(client_id)
-
-	err = w.DBWrite(key, value, vc)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Write to the database
-func (w Writer) DBWrite(key, value string, vc vclock.VClock) error {
-	obj, err := encodeWritable(Writable{value, vc})
-	if err != nil {
-		fmt.Printf("write failed: %v", err)
-		return err
-	}
-
-	err = w.db.Put(w.wo, []byte(key), obj)
-	if err != nil {
-		fmt.Printf("write failed: %v", err)
-		return err
-	}
-	return nil
-}
