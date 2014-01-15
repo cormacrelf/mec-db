@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/codegangsta/martini"
 	"github.com/cormacrelf/mec-db/peers"
+	"github.com/cormacrelf/mec-db/writer"
 	ml "github.com/hashicorp/memberlist"
 	"github.com/jmhodges/levigo"
 	"io/ioutil"
@@ -35,7 +36,7 @@ func shake(name string, root string) {
 	r := martini.NewRouter()
 	r.Get(`/mec`, GetRoot)
 	r.Get(`/mec/:key`, Get)
-	r.Post(`/mec/:key/:value`, Post)
+	r.Post(`/mec/:key/:value/:client/:vclock`, Post)
 	r.Put(`/mec/:key/:value`, Put)
 	r.Delete(`/mec/:key`, Delete)
 	// Add the router action
@@ -49,8 +50,13 @@ func shake(name string, root string) {
 	if err != nil {
 		panic("failed to create database")
 	}
+
+	w := writer.Create(db, pl)
+
 	m.Map(db)
 	m.Map(pl)
+	m.Map(w)
+
 }
 
 func joinCluster(name string, port int, nodes []Node) {

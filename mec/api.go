@@ -6,6 +6,7 @@ import (
 	// "strconv"
 	"github.com/codegangsta/martini"
 	"github.com/cormacrelf/mec-db/peers"
+	"github.com/cormacrelf/mec-db/writer"
 	"github.com/jmhodges/levigo"
 )
 
@@ -16,7 +17,6 @@ func GetRoot(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
 }
 
 func Get(pl *peers.PeerList, db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
-	(*pl).SendRandom(1, "HELLO", "i am a teapot")
 	key, _ := params["key"]
 	ro := levigo.NewReadOptions()
 	defer ro.Close()
@@ -29,14 +29,15 @@ func Get(pl *peers.PeerList, db *levigo.DB, enc Encoder, params martini.Params) 
 	return http.StatusOK, string(al)
 }
 
-func Post(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
+func Post(db *levigo.DB, w *writer.Writer, enc Encoder, params martini.Params) (int, string) {
 	key, _ := params["key"]
 	value, _ := params["value"]
+	client, _ := params["client"]
+	vclock, _ := params["vclock"]
 	// ro := levigo.NewReadOptions()
 	// defer ro.Close()
-	wo := levigo.NewWriteOptions()
-	defer wo.Close()
-	err := db.Put(wo, []byte(key), []byte(value))
+	
+	err := w.APIWrite(key, value, client, vclock)
 	if err != nil {
 		return http.StatusNotFound, Must(enc.Encode(
 			NewError(ErrCodeNotExist, fmt.Sprintf("write failed to key '%s'", params["key"]))))
