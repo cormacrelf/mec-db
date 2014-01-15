@@ -111,33 +111,31 @@ func main() {
 	// m is assigned in shake()
 	shake(config.Name, config.Root)
 
+	// Restart cluster on interrupt
 	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
-		<-c
-		// sig is a ^C, handle it
-		fmt.Println("\nrestarting...")
-		pl.Broadcast("RESTART")
-		// Wait for the RESTART message to get to everyone
-		time.Sleep(200 * time.Millisecond)
-		os.Exit(2)
-	}()
-	go func() {
+		c1 := make(chan os.Signal, 1)
+		signal.Notify(c1, os.Interrupt)
 		c2 := make(chan []string, 1)
 		pl.Subscribe(c2, "RESTART")
-		<-c2
-		// sig is a ^C, handle it
-		os.Exit(2)
+		for {
+			select {
+			case _ = <-c1:
+				// sig is a ^C, handle it
+				fmt.Println("\nrestarting...")
+				pl.Broadcast("RESTART")
+				// Wait for the RESTART message to get to everyone
+				time.Sleep(200 * time.Millisecond)
+				os.Exit(2)
+			case _ = <-c2:
+				os.Exit(2)
+			}
+		}
 	}()
 
 
 	// http listens on 'serve' port
 	err := http.ListenAndServe(fmt.Sprintf(":%d", config.HTTPPort), m)
 	if err != nil {
-		fmt.Printf("failed to create server")
-	} else {
-		fmt.Printf("listening on port %d", config.HTTPPort)
+		fmt.Printf("failed to create server: %v", err)
 	}
-
-	fmt.Printf("exiting?")
 }
