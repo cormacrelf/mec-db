@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"time"
+	"os"
+	"os/signal"
 )
 
 // API
@@ -21,7 +23,7 @@ var db *levigo.DB
 var list *ml.Memberlist
 var pl *peers.PeerList
 
-func shake(name string) {
+func shake(name string, root string) {
 	m = martini.New()
 
 	// Setup middleware
@@ -40,11 +42,10 @@ func shake(name string) {
 	m.Action(r.Handle)
 
 	// Inject database here so we get option parsing
-	var dir = fmt.Sprintf("/Users/cormac/mec/%s", name)
 	opts := levigo.NewOptions()
 	opts.SetCache(levigo.NewLRUCache(3 << 30))
 	opts.SetCreateIfMissing(true)
-	db, err := levigo.Open(dir, opts)
+	db, err := levigo.Open(root, opts)
 	if err != nil {
 		panic("failed to create database")
 	}
@@ -57,8 +58,9 @@ func joinCluster(name string, port int, nodes []Node) {
 	config.Name = name
 	config.BindAddr = "127.0.0.1"
 	config.BindPort = port
-	pl = peers.Create(port + 1, name)
-	ch := pl.Subscribe("HELLO")
+	pl = peers.Create(port+1, name)
+	ch := make(chan []string, 3)
+	pl.Subscribe(ch, "HELLO")
 	config.Events = pl
 	config.LogOutput = ioutil.Discard
 	list, err := ml.Create(config)
@@ -87,13 +89,18 @@ func joinCluster(name string, port int, nodes []Node) {
 	}()
 
 	// Our little fake module that receives HELLO msgs
-	go func(ch *chan []string) {
-		for {
-			a := <-*ch
+	go func() {
+		for a := range ch{
 			fmt.Printf("RECEIVED: %v\n", a[1:])
 		}
-	}(ch)
+	}()
 
+}
+
+func shutdown() {
+		db.Close()
+		list.Leave(500 * time.Millisecond)
+		list.Shutdown()
 }
 
 func main() {
@@ -102,7 +109,28 @@ func main() {
 	joinCluster(config.Name, config.Port, config.Node)
 
 	// m is assigned in shake()
-	shake(config.Name)
+	shake(config.Name, config.Root)
+
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt)
+		<-c
+		// sig is a ^C, handle it
+		fmt.Println("\nrestarting...")
+		pl.Broadcast("RESTART")
+		// Wait for the RESTART message to get to everyone
+		time.Sleep(200 * time.Millisecond)
+		os.Exit(2)
+	}()
+	go func() {
+		c2 := make(chan []string, 1)
+		pl.Subscribe(c2, "RESTART")
+		<-c2
+		// sig is a ^C, handle it
+		os.Exit(2)
+	}()
+
+
 	// http listens on 'serve' port
 	err := http.ListenAndServe(fmt.Sprintf(":%d", config.HTTPPort), m)
 	if err != nil {

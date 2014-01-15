@@ -5,6 +5,7 @@ import (
 	ml "github.com/hashicorp/memberlist"
 	zmq "github.com/pebbe/zmq4"
 	"math/rand"
+	"time"
 )
 
 type PeerList struct {
@@ -28,7 +29,7 @@ func Create(port int, name string) *PeerList {
 		panic(fmt.Sprintf("Can't bind router on port %d", port))
 	}
 	pl := &PeerList{
-		Name: name,
+		Name:    name,
 		router:  r,
 		dealers: make(map[string]*zmq.Socket, 100),
 		subs:    make(map[string]*chan []string, 100),
@@ -64,17 +65,14 @@ func (p *PeerList) NotifyJoin(node *ml.Node) {
 // Delete a leaving node's interface
 func (p *PeerList) NotifyLeave(node *ml.Node) {
 	// (*p).dealers[node.Name].Close()
+	fmt.Printf("LEFT:   %v, %v:%d\n", node.Name, node.Addr, node.Port)
 	delete((*p).dealers, node.Name)
 }
 
 // Subscribes sender to a msgtype (eg WRITE): returns a chan through
 // which all such messages will be forwarded.
-func (p *PeerList) Subscribe(msgtype string) *chan []string {
-
-	ch := make(chan []string, 1000) /// High Water Mark = 1000
-	(*p).subs[msgtype] = &ch
-	// fmt.Printf("%#v\n", (*p).subs)
-	return &ch
+func (p *PeerList) Subscribe(c chan []string, msgtype string) {
+	(*p).subs[msgtype] = &c
 }
 
 // receive() receives messages on ROUTER in a loop
@@ -83,10 +81,12 @@ func (p PeerList) receive() {
 		data, err := p.router.RecvMessage(0)
 		if err != nil {
 			fmt.Printf("router err %v\n", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
 		// fmt.Printf("%v\n", data[1])
 
-		// fmt.Printf("incoming: %s\n", data[1])
+		// fmt.Printf("incoming: %v\n", data)
 
 		msgtype := data[1]
 		channel := p.subs[msgtype]
@@ -104,12 +104,13 @@ func (p PeerList) Reply(msg ...string) {
 }
 
 // Send one message to a named recipient
-func (p PeerList) Message(recipient string, msg ...string) {
+func (p PeerList) Message(recipient string, msg ...string) error {
 	dest := p.dealers[recipient]
 	_, err := dest.SendMessage(msg)
 	if err != nil {
 		fmt.Printf("dealer error %v\n", err)
 	}
+	return err
 }
 
 // Send msg to n random nodes from cluster (for a read/write op)
@@ -133,4 +134,15 @@ func (p PeerList) SendRandom(n int, msg ...string) int {
 	}
 
 	return n
+}
+
+func (p PeerList) Broadcast(msg ...string) int {
+	acc := 0
+	for k, _ := range p.dealers {
+		err := p.Message(k, msg...)
+		if err == nil {
+			acc++
+		}
+	}
+	return acc
 }
