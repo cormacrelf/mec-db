@@ -52,12 +52,12 @@ func (w Store) Listen() {
 		select {
 		case msg := <-writes:
 			// fmt.Printf("store received: %v\n", msg)
-			key, value, vc, err := parseMsg(false, msg...)
+			key, value, content_type, vc, err := parseMsg(false, msg...)
 			if err != nil {
 				// handle error
 				// or just silently drop?
 			} else {
-				err = w.DBWrite(key, value, vc)
+				err = w.DBWrite(key, value, content_type, vc)
 				if err != nil {
 					// reply with fail
 					w.pl.Reply(msg[0], "FAIL")
@@ -67,37 +67,44 @@ func (w Store) Listen() {
 			}
 		case  msg := <-gets:
 			fmt.Printf("store received: %v\n", msg)
-			key, value, vc, err := parseMsg(false, msg...)
+			key, value, content_type, vc, err := parseMsg(false, msg...)
 			if err != nil {
 				// handle error
 				// or just silently drop?
 			} else {
-				fmt.Printf("will write: %v %v %v\n", key, value, vc)
-				w.DBWrite(key, value, vc)
+				fmt.Printf("will write: %v %v %v %v\n", key, value, content_type, vc)
+				w.DBWrite(key, value, content_type, vc)
 			}
 		}
 	}
 }
 
 // APIWrite takes a client request and distributes it to itself and W-1 servers.
-func (s Store) APIWrite(key, value, client_id, packed_vclock string) error {
+func (s Store) APIWrite(key, value, content_type, client_id, packed_vclock string) (string, error) {
 	vc, err := parseVClock(packed_vclock)
 	if err != nil {
 		// handle the bad VClock input by making a new one
 		vc = vclock.Fresh()
 	}
+
 	vc.Increment(client_id)
 
-	err = s.DistributeWrite(key, value, vc)
+	err = s.DistributeWrite(key, value, content_type, vc)
 	if err != nil {
-		return err
+		// nothing happened, give back the original clock
+		return packed_vclock, err
 	}
 
-	return nil
+	b64, err := encodeVClock(vc)
+	if err != nil {
+		return packed_vclock, err
+	}
+
+	return b64, nil
 }
 
-func (s Store) DistributeWrite(key, value string, vc vclock.VClock) error {
-	msg, err := encodeMsg(key, value, vc)
+func (s Store) DistributeWrite(key, value, content_type string, vc vclock.VClock) error {
+	msg, err := encodeMsg(key, value, content_type, vc)
 	if err != nil {
 		return err // fail here so we don't send unintelligible messages
 	}
@@ -105,7 +112,7 @@ func (s Store) DistributeWrite(key, value string, vc vclock.VClock) error {
 	if n < 1 {
 		return errors.New("not enough successful writes")
 	}
-	err = s.DBWrite(key, value, vc)
+	err = s.DBWrite(key, value, content_type, vc)
 	if err != nil {
 		return err
 	}
@@ -113,9 +120,9 @@ func (s Store) DistributeWrite(key, value string, vc vclock.VClock) error {
 }
 
 // Write to the database
-func (s Store) DBWrite(key, value string, vc vclock.VClock) error {
-	fmt.Printf("will write: %v %v %v\n", key, value, vc)
-	obj, err := encodeStorable(Storable{value, vc})
+func (s Store) DBWrite(key, value, content_type string, vc vclock.VClock) error {
+	fmt.Printf("will write: %v %v %v %v\n", key, value, content_type, vc)
+	obj, err := encodeStorable(Storable{value, content_type, vc})
 	if err != nil {
 		fmt.Printf("write failed: %v", err)
 		return err
@@ -130,21 +137,23 @@ func (s Store) DBWrite(key, value string, vc vclock.VClock) error {
 }
 
 // APIWrite returns value for key + a base64-encoded VClock
-func (s Store) APIRead(key, client_id string) (string, string, error) {
-	val, vc, err := s.DBRead(key)
+func (s Store) APIRead(key, client_id string) (string, string, string, error) {
+	val, content_type, vc, err := s.DBRead(key)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	b64, err := encodeVClock(vc)
 	if err != nil {
-		return val, "", err
+		b64, _ = encodeVClock(vclock.Fresh())
+		return val, content_type, b64, err
 	}
 
-	return val, b64, err
+	return val, content_type, b64, nil
 }
 
+// Performs a Read-Repair on the key and returns a merged value
 func (s Store) DistributeRead(key string, vc vclock.VClock) error {
-	msg, err := encodeMsg(key, key, vc)
+	msg, err := encodeMsg(key, key, key, vc)
 	if err != nil {
 		return err // fail here so we don't send unintelligible messages
 	}
@@ -152,7 +161,7 @@ func (s Store) DistributeRead(key string, vc vclock.VClock) error {
 	if n < 1 {
 		return errors.New("not enough successful writes")
 	}
-	_, _, err = s.DBRead(key)
+	_, _, _, err = s.DBRead(key)
 	if err != nil {
 		return err
 	}
@@ -160,19 +169,19 @@ func (s Store) DistributeRead(key string, vc vclock.VClock) error {
 }
 
 // Write to the database
-func (s Store) DBRead(key string) (string, vclock.VClock, error) {
+func (s Store) DBRead(key string) (string, string, vclock.VClock, error) {
 	fmt.Printf("will read: %v\n", key)
 
 	obj, err := s.db.Get(s.ro, []byte(key))
 	if err != nil {
 		fmt.Printf("write failed: %v", err)
-		return "", nil, err
+		return "", "", nil, err
 	}
 	st, err := decodeStorable(obj)
 	if err != nil {
 		fmt.Printf("value decode failed: %v", err)
-		return "", nil, err
+		return "", "", nil, err
 	}
 
-	return st.Value, st.VC, nil
+	return st.Value, st.Content_Type, st.VC, nil
 }

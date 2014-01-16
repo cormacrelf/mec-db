@@ -9,7 +9,7 @@ import (
 )
 
 // Takes message parts and returns key, value, VClock
-func parseMsg(naked bool, msg ...string) (string, string, vclock.VClock, error) {
+func parseMsg(naked bool, msg ...string) (string, string, string, vclock.VClock, error) {
 	var mh codec.MsgpackHandle
 	var vc vclock.VClock
 	mh.MapType = reflect.TypeOf(vc)
@@ -22,15 +22,15 @@ func parseMsg(naked bool, msg ...string) (string, string, vclock.VClock, error) 
 	}
 	// key,	   value,  VClock
 	// string, string, []byte  ... msg[ia] == "WRITE"
-	key, value, b := msg[ia+1], msg[ia+2], []byte(msg[ia+3])
+	key, value, content_type, b := msg[ia+1], msg[ia+2], msg[ia+3], []byte(msg[ia+4])
 
 	dec := codec.NewDecoderBytes(b, &mh)
 	err := dec.Decode(&vc)
 	if err != nil {
-		return key, value, nil, errors.New("VClock not parsed")
+		return key, value, content_type, nil, errors.New("VClock not parsed")
 	}
 
-	return key, value, vc, nil
+	return key, value, content_type, vc, nil
 }
 
 func parseVClock(encoded string) (vclock.VClock, error) {
@@ -69,10 +69,9 @@ func encodeVClock(vc vclock.VClock) (string, error) {
 }
 
 // Encode message parts into sendable zeromq message
-func encodeMsg(key, value string, vc vclock.VClock) ([]string, error) {
+func encodeMsg(key, value, content_type string, vc vclock.VClock) ([]string, error) {
 	var mh codec.MsgpackHandle
 	var b []byte
-
 
 	mh.MapType = reflect.TypeOf(vc)
 
@@ -82,15 +81,16 @@ func encodeMsg(key, value string, vc vclock.VClock) ([]string, error) {
 		return nil, errors.New("VClock not encoded")
 	}
 
-	msg := make([]string, 4, 4)
-	msg[0], msg[1], msg[2], msg[3] = "WRITE", key, value, string(b)
+	msg := make([]string, 5)
+	msg[0], msg[1], msg[2], msg[3], msg[4] = "WRITE", key, value, content_type, string(b)
 
 	return msg, nil
 }
 
 type Storable struct {
-	Value string
-	VC  vclock.VClock
+	Value        string
+	Content_Type string
+	VC           vclock.VClock
 }
 
 func encodeStorable(wr Storable) ([]byte, error) {
@@ -102,7 +102,7 @@ func encodeStorable(wr Storable) ([]byte, error) {
 	enc := codec.NewEncoderBytes(&b, &mh)
 	err := enc.Encode(wr)
 	if err != nil {
-		return nil, errors.New("failed to encode Writable")
+		return nil, errors.New("failed to encode Storable")
 	}
 	return b, nil
 }
@@ -115,9 +115,8 @@ func decodeStorable(data []byte) (Storable, error) {
 	dec := codec.NewDecoderBytes(data, &mh)
 	err := dec.Decode(&wr)
 	if err != nil {
-		return Storable{}, errors.New("writable not decoded")
+		return Storable{}, errors.New("Storable not decoded")
 	}
 
 	return wr, nil
 }
-

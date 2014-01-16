@@ -36,7 +36,7 @@ func shake(name string, root string) {
 	r := martini.NewRouter()
 	r.Get(`/mec`, GetRoot)
 	r.Get(`/mec/:key`, Get)
-	r.Post(`/mec/:key/:value/:client/:vclock`, Post)
+	r.Post(`/mec/:key`, Post)
 	r.Put(`/mec/:key/:value`, Put)
 	r.Delete(`/mec/:key`, Delete)
 	// Add the router action
