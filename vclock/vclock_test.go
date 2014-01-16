@@ -3,12 +3,12 @@ package vclock
 import "testing"
 
 func TestEqual(t *testing.T) {
-	// Different timestamps, same values
-	A := VClock{"lion": Entry{counter: 1309, timestamp: 1389503545254049010}, "gazelle": Entry{counter: 1, timestamp: 1389503545254049981}}
-	B := VClock{"lion": Entry{counter: 1309, timestamp: 1389503545254050111}, "gazelle": Entry{counter: 1, timestamp: 1389503545254050391}}
+	// Different Timestamps, same values
+	A := VClock{"lion": Entry{Counter: 1309, Timestamp: 1389503545254049010}, "gazelle": Entry{Counter: 1, Timestamp: 1389503545254049981}}
+	B := VClock{"lion": Entry{Counter: 1309, Timestamp: 1389503545254050111}, "gazelle": Entry{Counter: 1, Timestamp: 1389503545254050391}}
 
 	if !Equal(A, B) {
-		defer t.Error("Different timestamps should be equal")
+		defer t.Error("Different Timestamps should be equal")
 	}
 
 	C, D := Fresh(), Fresh()
@@ -19,16 +19,16 @@ func TestEqual(t *testing.T) {
 }
 
 func TestValidationShort(t *testing.T) {
-	A := VClock{"lion": Entry{counter: 10, timestamp: -5}}
-	B := VClock{"lion": Entry{counter: -10, timestamp: 1389504412525473176}}
-	C := VClock{"": Entry{counter: 10, timestamp: 1389504412525473176}}
-	D := VClock{"lion": Entry{counter: 10, timestamp: 1389504412525473176}}
+	A := VClock{"lion": Entry{Counter: 10, Timestamp: -5}}
+	B := VClock{"lion": Entry{Counter: -10, Timestamp: 1389504412525473176}}
+	C := VClock{"": Entry{Counter: 10, Timestamp: 1389504412525473176}}
+	D := VClock{"lion": Entry{Counter: 10, Timestamp: 1389504412525473176}}
 	a, b, c, d := A.IsValid(), B.IsValid(), C.IsValid(), D.IsValid()
 	switch {
 	case a:
-		t.Error("validated negative timestamp")
+		t.Error("validated negative Timestamp")
 	case b:
-		t.Error("validated negative counter")
+		t.Error("validated negative Counter")
 	case c:
 		t.Error("validated empty client id")
 	case !d:
@@ -37,13 +37,13 @@ func TestValidationShort(t *testing.T) {
 }
 
 func TestMerge(t *testing.T) {
-	A := VClock{"lion": Entry{counter: 1309, timestamp: 1}, "gazelle": Entry{counter: 1, timestamp: 13}, "zebra": Entry{counter: 7, timestamp: 9}}
-	B := VClock{"lion": Entry{counter: 1, timestamp: 138}, "gazelle": Entry{counter: 6, timestamp: 1389}}
+	A := VClock{"lion": Entry{Counter: 1309, Timestamp: 1}, "gazelle": Entry{Counter: 1, Timestamp: 13}, "zebra": Entry{Counter: 7, Timestamp: 9}}
+	B := VClock{"lion": Entry{Counter: 1, Timestamp: 138}, "gazelle": Entry{Counter: 6, Timestamp: 1389}}
 
 	C := Merge([]VClock{A, B})
-	D := VClock{"lion":Entry{counter:1309, timestamp:138}, "gazelle":Entry{counter:6, timestamp:1389}, "zebra":Entry{counter:7, timestamp:9}}
+	D := VClock{"lion":Entry{Counter:1309, Timestamp:138}, "gazelle":Entry{Counter:6, Timestamp:1389}, "zebra":Entry{Counter:7, Timestamp:9}}
 
-	// we want timestamps to merge too.
+	// we want Timestamps to merge too.
 	if !Equal(C, D) {
 		t.Error("merge failed:\n", C, "!=", D)
 	}
@@ -53,11 +53,28 @@ func TestCompare(t *testing.T) {
 	// stub
 }
 
+func TestLatest(t *testing.T) {
+	A := New("lion")
+	B := New("lion")
+	C := New("lion")
+	B.Increment("gazelle")
+	C.Increment("zebra")
+
+	clocks := make(map[string]VClock, 3)
+	clocks["A"] = A
+	clocks["B"] = B
+	clocks["C"] = C
+
+	if 2 != len(Latest(clocks)) {
+		t.Error("didn't catch the branch")
+	}
+}
+
 // Benchmarks
 
 func BenchmarkMerge(b *testing.B) {
-	A := VClock{"lion": Entry{counter: 1309, timestamp: 1}, "gazelle": Entry{counter: 1, timestamp: 13}, "zebra": Entry{counter: 7, timestamp: 9}}
-	B := VClock{"lion": Entry{counter: 1, timestamp: 138}, "gazelle": Entry{counter: 6, timestamp: 1389}}
+	A := VClock{"lion": Entry{Counter: 1309, Timestamp: 1}, "gazelle": Entry{Counter: 1, Timestamp: 13}, "zebra": Entry{Counter: 7, Timestamp: 9}}
+	B := VClock{"lion": Entry{Counter: 1, Timestamp: 138}, "gazelle": Entry{Counter: 6, Timestamp: 1389}}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -66,8 +83,8 @@ func BenchmarkMerge(b *testing.B) {
 }
 
 func BenchmarkCompare(b *testing.B) {
-	A := VClock{"lion": Entry{counter: 1309, timestamp: 1}, "gazelle": Entry{counter: 1, timestamp: 13}, "zebra": Entry{counter: 7, timestamp: 9}}
-	B := VClock{"lion": Entry{counter: 1, timestamp: 138}, "gazelle": Entry{counter: 6, timestamp: 1389}}
+	A := VClock{"lion": Entry{Counter: 1309, Timestamp: 1}, "gazelle": Entry{Counter: 1, Timestamp: 13}, "zebra": Entry{Counter: 7, Timestamp: 9}}
+	B := VClock{"lion": Entry{Counter: 1, Timestamp: 138}, "gazelle": Entry{Counter: 6, Timestamp: 1389}}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -76,8 +93,8 @@ func BenchmarkCompare(b *testing.B) {
 }
 
 func BenchmarkEqual(b *testing.B) {
-	A := VClock{"lion": Entry{counter: 1309, timestamp: 1}, "gazelle": Entry{counter: 1, timestamp: 13}, "zebra": Entry{counter: 7, timestamp: 9}}
-	B := VClock{"lion": Entry{counter: 1, timestamp: 138}, "gazelle": Entry{counter: 6, timestamp: 1389}}
+	A := VClock{"lion": Entry{Counter: 1309, Timestamp: 1}, "gazelle": Entry{Counter: 1, Timestamp: 13}, "zebra": Entry{Counter: 7, Timestamp: 9}}
+	B := VClock{"lion": Entry{Counter: 1, Timestamp: 138}, "gazelle": Entry{Counter: 6, Timestamp: 1389}}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -86,7 +103,7 @@ func BenchmarkEqual(b *testing.B) {
 }
 
 func BenchmarkIncrement(b *testing.B) {
-	A := VClock{"lion": Entry{counter: 1309, timestamp: 1}, "gazelle": Entry{counter: 1, timestamp: 13}, "zebra": Entry{counter: 7, timestamp: 9}}
+	A := VClock{"lion": Entry{Counter: 1309, Timestamp: 1}, "gazelle": Entry{Counter: 1, Timestamp: 13}, "zebra": Entry{Counter: 7, Timestamp: 9}}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -115,10 +132,10 @@ func rec(vc VClock, mq chan bool) {
 }
 
 func doNotTestValidation(t *testing.T) {
-	A := VClock{"lion": Entry{counter: 10, timestamp: -5}}
-	B := VClock{"lion": Entry{counter: -10, timestamp: 1389504412525473176}}
-	C := VClock{"": Entry{counter: 10, timestamp: 1389504412525473176}}
-	D := VClock{"lion": Entry{counter: 10, timestamp: 1389504412525473176}}
+	A := VClock{"lion": Entry{Counter: 10, Timestamp: -5}}
+	B := VClock{"lion": Entry{Counter: -10, Timestamp: 1389504412525473176}}
+	C := VClock{"": Entry{Counter: 10, Timestamp: 1389504412525473176}}
+	D := VClock{"lion": Entry{Counter: 10, Timestamp: 1389504412525473176}}
 
 	mq := make(chan bool, 10)
 
@@ -145,10 +162,10 @@ func doNotTestValidation(t *testing.T) {
 				failpoint = "empty client id"
 			}
 		} else {
-			failpoint = "negative counter"
+			failpoint = "negative Counter"
 		}
 	} else {
-		failpoint = "negative timestamp"
+		failpoint = "negative Timestamp"
 	}
 
 	if !success {

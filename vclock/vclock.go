@@ -208,6 +208,39 @@ func MapOutdated(nodes map[string]VClock) []string {
 	return acc
 }
 
+// Latest finds the most logically recent set of clocks in a map and returns
+// the one with the latest timestamp.
+func Latest(nodes map[string]VClock) (map[string]VClock) {
+	latest := make(map[string]VClock, len(nodes))
+	clocks := make([]VClock, len(nodes))
+	i := 0
+	for _, v := range nodes {
+		clocks[i] = v
+		i++
+	}
+	for k, v := range nodes {
+		if !Outdated(v, clocks) {
+			latest[k] = v
+		}
+	}
+
+	return latest
+}
+
+// AllEqual returns true if every given clock is equal
+func AllEqual(clocks []VClock) bool {
+	for i, v := range clocks {
+		for j, other := range clocks {
+			if i < j {
+				if !Equal(v, other) {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
 // Merge a list of clocks and increment own counter
 func MergeSelf(clocks []VClock, self string) VClock {
 	clock := Merge(clocks)
