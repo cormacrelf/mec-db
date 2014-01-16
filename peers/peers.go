@@ -120,50 +120,42 @@ func (p PeerList) MessageExpectResponse(recipient string, timeout time.Duration,
 	_, err := dest.SendMessage(msg)
 	if err != nil {
 		fmt.Printf("dealer send error %v\n", err)
+		return nil, errors.New(fmt.Sprintf("dealer send error %v\n", err))
 	}
 
-	poller := zmq.NewPoller()
-	poller.Add(dest, zmq.POLLIN)
-	//  Process messages from both sockets
-	sockets, e := poller.Poll(timeout)
-	for _, socket := range sockets {
-		switch s := socket.Socket; s {
-		case dest:
-			response, err := s.RecvMessage(0)
-			if err != nil {
-				return nil, errors.New(fmt.Sprintf("bad reponse: %v\n", err))
-			}
-			return response, nil
-			//  Process msg
-		}
+	response, err := dest.RecvMessage(0)
+	if err != nil {
+		return nil, errors.New("no response")
 	}
-	return nil, errors.New(fmt.Sprintf("no response: %v\n", e))
+
+	return response, nil
 }
 
 // Send multiple messages and await replies with a global timeout
 func (p PeerList) MultiMessageExpectResponse(recipients []string, timeout time.Duration, msg ...string) (map[string][]string) {
-	poller := zmq.NewPoller()
-	acc := make(map[string][]string, len(recipients))
-	//  Process messages from both sockets
-	for i:=0; i < len(recipients); i++ {
-		sockets, _ := poller.Poll(timeout)
-		for _, socket := range sockets {
-			s := socket.Socket
-			for _, r := range recipients {
-				if p.dealers[r] == s {
-					msg, err := s.RecvMessage(0)
-					if err == nil {
-						acc[r] = msg
-					}
-				}
+	done := make(chan bool)
+	acc := make(map[string][]string)
+	for _, r := range recipients {
+		r := r
+		remote := p.dealers[r]
+		remote.SendMessage(msg)
+		go func(){
+			msg, err := remote.RecvMessage(0)
+			if err == nil {
+				acc[r] = msg
 			}
-		}
+			done <- true // trash value
+		}()
+	}
+
+	for i:=0; i < len(recipients); i++ {
+		<-done
 	}
 
 	return acc
 }
 
-func (p PeerList) RandomNodes(n int) ([]string, int) {
+func (p PeerList) RandomNodes() ([]string, int) {
 	slice := make([]string, 0)
 	for k, _ := range p.dealers {
 		slice = append(slice, k)
@@ -179,7 +171,7 @@ func (p PeerList) RandomNodes(n int) ([]string, int) {
 // Send msg to n random nodes from cluster (for a read/write op)
 // Returns number of messages sent (e.g. if n < available members)
 func (p PeerList) SendRandom(n int, msg ...string) int {
-	slice, t := p.RandomNodes(n)
+	slice, t := p.RandomNodes()
 	if n > t {
 		n = t
 	}
@@ -193,7 +185,7 @@ func (p PeerList) SendRandom(n int, msg ...string) int {
 // Verify we have `n` GOOD responses to a message
 // The alternative is an error or a "FAIL"
 func (p PeerList) VerifyRandom(n int, msg ...string) int {
-	slice, t := p.RandomNodes(n)
+	slice, t := p.RandomNodes()
 	if n > t {
 		n = t
 	}
@@ -218,12 +210,12 @@ func (p PeerList) VerifyRandom(n int, msg ...string) int {
 
 // Returns all replies from N random nodes to caller
 func (p PeerList) RandomResponses(n int, msg ...string) (map[string][]string, int) {
-	slice, t := p.RandomNodes(n)
+	slice, t := p.RandomNodes()
 	if n > t {
 		n = t
 	}
 
-	responses := p.MultiMessageExpectResponse(slice[:n], 500 * time.Millisecond, msg...)
+	responses := p.MultiMessageExpectResponse(slice[:n], 5000 * time.Millisecond, msg...)
 
 	// len(responses) <= n <= number of available clients
 	return responses, len(responses)
