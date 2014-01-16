@@ -89,8 +89,8 @@ func encodeMsg(key, value string, vc vclock.VClock) ([]string, error) {
 }
 
 type Storable struct {
-	value string
-	vc  vclock.VClock
+	Value string
+	VC  vclock.VClock
 }
 
 func encodeStorable(wr Storable) ([]byte, error) {

@@ -30,7 +30,7 @@ func shake(name string, root string) {
 	// Setup middleware
 	m.Use(martini.Recovery())
 	m.Use(martini.Logger())
-	m.MapTo(jsonEncoder{}, (*Encoder)(nil))
+    m.Use(MapEncoder)
 
 	// Setup routes
 	r := martini.NewRouter()
