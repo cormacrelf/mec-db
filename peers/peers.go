@@ -116,17 +116,52 @@ func (p PeerList) Message(recipient string, msg ...string) error {
 }
 
 // Send one message and await reply string
-func (p PeerList) MessageExpectResponse(recipient string, msg ...string) ([]string, error) {
+func (p PeerList) MessageExpectResponse(recipient string, timeout time.Duration, msg ...string) ([]string, error) {
 	dest := p.dealers[recipient]
 	_, err := dest.SendMessage(msg)
 	if err != nil {
 		fmt.Printf("dealer send error %v\n", err)
 	}
-	response, err := dest.RecvMessage(0)
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("no reponse: %v\n", err))
+
+	poller := zmq.NewPoller()
+	poller.Add(dest, zmq.POLLIN)
+	//  Process messages from both sockets
+	sockets, e := poller.Poll(timeout)
+	for _, socket := range sockets {
+		switch s := socket.Socket; s {
+		case dest:
+			response, err := s.RecvMessage(0)
+			if err != nil {
+				return nil, errors.New(fmt.Sprintf("bad reponse: %v\n", err))
+			}
+			return response, nil
+			//  Process msg
+		}
 	}
-	return response, nil
+	return nil, errors.New(fmt.Sprintf("no response: %v\n", e))
+}
+
+// Send multiple messages and await replies with a global timeout
+func (p PeerList) MultiMessageExpectResponse(recipients []string, timeout time.Duration, msg ...string) (map[string][]string) {
+	poller := zmq.NewPoller()
+	acc := make(map[string][]string, len(recipients))
+	//  Process messages from both sockets
+	for i:=0; i < len(recipients); i++ {
+		sockets, _ := poller.Poll(timeout)
+		for _, socket := range sockets {
+			s := socket.Socket
+			for _, r := range recipients {
+				if p.dealers[r] == s {
+					msg, err := s.RecvMessage(0)
+					if err == nil {
+						acc[r] = msg
+					}
+				}
+			}
+		}
+	}
+
+	return acc
 }
 
 func (p PeerList) RandomNodes(n int) ([]string, int) {
@@ -168,7 +203,7 @@ func (p PeerList) VerifyRandom(n int, msg ...string) int {
 
 	acc := 0
 	for i := 0; i < n; i++ {
-		str, err := p.MessageExpectResponse(slice[i], msg...)
+		str, err := p.MessageExpectResponse(slice[i], 500 * time.Millisecond, msg...)
 		if len(str) < 1 {
 			// so we don't get any index errors
 			continue
@@ -182,6 +217,19 @@ func (p PeerList) VerifyRandom(n int, msg ...string) int {
 	// acc <= n <= number of nodes we could find
 	// ideally acc == n
 	return acc
+}
+
+// Returns all replies from N random nodes to caller
+func (p PeerList) RandomResponses(n int, msg ...string) (map[string][]string, int) {
+	slice, t := p.RandomNodes(n)
+	if n > t {
+		n = t
+	}
+
+	responses := p.MultiMessageExpectResponse(slice[:n], 500 * time.Millisecond, msg...)
+
+	// len(responses) <= n <= number of available clients
+	return responses, len(responses)
 }
 
 func (p PeerList) Broadcast(msg ...string) int {
