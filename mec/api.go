@@ -21,8 +21,9 @@ func Get(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWr
 	client := req.Header.Get("X-Client-ID")
 	val, content_type, b64, err := s.APIRead(key, client)
 	if err != nil || val == "" {
-		return http.StatusNotFound, Must(enc.Encode(
-			NewError(ErrCodeNotExist, fmt.Sprintf("key %s does not exist", params["key"]))))
+		// return http.StatusNotFound, Must(enc.Encode(
+		// 	NewError(ErrCodeNotExist, fmt.Sprintf("key %s does not exist", params["key"]))))
+		return 500, err.Error()
 	}
 
 	res.Header().Set("X-Mec-Vclock", b64)

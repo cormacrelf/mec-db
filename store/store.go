@@ -6,6 +6,7 @@ import (
 	"github.com/cormacrelf/mec-db/peers"
 	"github.com/cormacrelf/mec-db/vclock"
 	"github.com/jmhodges/levigo"
+	"time"
 )
 
 // handles
@@ -52,7 +53,7 @@ func (w Store) Listen() {
 		select {
 		case msg := <-writes:
 			// fmt.Printf("store received: %v\n", msg)
-			key, value, content_type, vc, err := parseMsg(false, msg...)
+			key, value, content_type, vc, err := parseWriteMsg(false, msg...)
 			if err != nil {
 				// handle error
 				// or just silently drop?
@@ -66,15 +67,15 @@ func (w Store) Listen() {
 				}
 			}
 		case  msg := <-gets:
-			fmt.Printf("store received: %v\n", msg)
-			key, value, content_type, vc, err := parseMsg(false, msg...)
+			// Respond to GET messages with FAIL or DATA
+			key := parseGetMsg(false, msg...)
+			value, content_type, vc, err := w.DBRead(key)
+			r, err := encodeDataMsg("DATA", key, value, content_type, vc)
+			reply := append([]string{msg[0]}, r...)
 			if err != nil {
-				// handle error
-				// or just silently drop?
-			} else {
-				fmt.Printf("will write: %v %v %v %v\n", key, value, content_type, vc)
-				w.DBWrite(key, value, content_type, vc)
+				w.pl.Reply(msg[0], "FAIL")
 			}
+			w.pl.Reply(reply...)
 		}
 	}
 }
@@ -104,17 +105,13 @@ func (s Store) APIWrite(key, value, content_type, client_id, packed_vclock strin
 }
 
 func (s Store) DistributeWrite(key, value, content_type string, vc vclock.VClock) error {
-	msg, err := encodeMsg(key, value, content_type, vc)
+	msg, err := encodeWriteMsg(key, value, content_type, vc)
 	if err != nil {
 		return err // fail here so we don't send unintelligible messages
 	}
-	n := s.pl.VerifyRandom(1, msg...)
-	if n < 1 {
+	n := s.pl.VerifyRandom(W, msg...)
+	if n < W {
 		return errors.New("not enough successful writes")
-	}
-	err = s.DBWrite(key, value, content_type, vc)
-	if err != nil {
-		return err
 	}
 	return nil
 }
@@ -136,13 +133,13 @@ func (s Store) DBWrite(key, value, content_type string, vc vclock.VClock) error 
 	return nil
 }
 
-// APIWrite returns value for key + a base64-encoded VClock
+// APIRead returns value for key + a base64-encoded VClock
 func (s Store) APIRead(key, client_id string) (string, string, string, error) {
-	val, content_type, vc, err := s.DBRead(key)
-	if err != nil {
-		return "", "", "", err
-	}
+	val, content_type, vc, err_read := s.DistributeRead(key)
 	b64, err := encodeVClock(vc)
+	if err_read != nil {
+		return val, content_type, b64, err_read
+	}
 	if err != nil {
 		b64, _ = encodeVClock(vclock.Fresh())
 		return val, content_type, b64, err
@@ -152,26 +149,84 @@ func (s Store) APIRead(key, client_id string) (string, string, string, error) {
 }
 
 // Performs a Read-Repair on the key and returns a merged value
-func (s Store) DistributeRead(key string, vc vclock.VClock) error {
-	msg, err := encodeMsg(key, key, key, vc)
-	if err != nil {
-		return err // fail here so we don't send unintelligible messages
+func (s Store) DistributeRead(key string) (string, string, vclock.VClock, error) {
+	msg:= encodeGetMsg(key)
+	responses, n := s.pl.RandomResponses(R, msg...)
+	if n < R {
+		if n >= 1 {
+			for _, v := range responses {
+				_, value, content_type, clock, err := parseDataMsg(false, v...)
+				if err != nil {
+					continue
+				}
+				return value, content_type, clock, errors.New("found data but repair failed")
+				break
+			}
+		}
+		return "", "", nil, errors.New(fmt.Sprintf("not enough successful reads: %d", n))
 	}
-	n := s.pl.VerifyRandom(1, msg...)
-	if n < 1 {
-		return errors.New("not enough successful writes")
+	clockmap := make(map[string]vclock.VClock, n)
+	// get a vclock for each response
+	for k, msg := range responses {
+		_, _, _, vc, _ := parseDataMsg(true, msg...)
+		clockmap[k] = vc
 	}
-	_, _, _, err = s.DBRead(key)
-	if err != nil {
-		return err
+
+	latest := vclock.Latest(clockmap)
+	clocks := make([]vclock.VClock, len(latest))
+	i := 0
+	for _, v := range latest {
+		clocks[i] = v
+		i++
 	}
-	return nil
+
+	if len(latest) > 1 && !vclock.AllEqual(clocks) {
+		// TODO: we have siblings! handle it with multiple responses in future
+		return "", "", nil, errors.New("siblings")
+	} else {
+		// now we have a list of equivalent clocks, pick one
+		var (
+			nodename string
+			clock vclock.VClock
+		)
+		for k, v := range latest {
+			nodename, clock = k, v
+		}
+
+		outdated := vclock.MapOutdated(clockmap)
+
+		key, value, content_type, _, err := parseDataMsg(true, responses[nodename]...)
+		if err != nil {
+			return "", "", nil, errors.New("unparseable")
+		}
+		fmt.Printf("clockmap: %v\n\n", clockmap)
+		fmt.Printf("outdated: %v\n\n", outdated)
+		for i, node := range outdated {
+
+			msg, err := encodeWriteMsg(key, value, content_type, clock)
+			if err != nil {
+				if i == len(outdated) {
+					return "", "", nil, errors.New("unparseable")
+				}
+				continue
+			}
+
+			go s.pl.MessageExpectResponse(node, time.Second, msg...)
+			// If they are unable to repair...
+			// Who cares? That's not my fault.
+		}
+
+		return value, content_type, clock, nil
+	}
+
+	// That should repair everything.
+	// And we never get here
+
+	return "", "", nil, nil
 }
 
 // Write to the database
 func (s Store) DBRead(key string) (string, string, vclock.VClock, error) {
-	fmt.Printf("will read: %v\n", key)
-
 	obj, err := s.db.Get(s.ro, []byte(key))
 	if err != nil {
 		fmt.Printf("write failed: %v", err)
