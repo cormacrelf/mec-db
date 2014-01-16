@@ -43,10 +43,9 @@ func Create(port int, name string) *PeerList {
 
 // Add an interface to any new node's ROUTER to our knowledge
 func (p *PeerList) NotifyJoin(node *ml.Node) {
-	if p.Name == node.Name {
-		return
+	if p.Name != node.Name {
+		fmt.Printf("JOINED: %v, %v:%d\n", node.Name, node.Addr, node.Port)
 	}
-	fmt.Printf("JOINED: %v, %v:%d\n", node.Name, node.Addr, node.Port)
 	sock, err := zmq.NewSocket(zmq.DEALER)
 	if err != nil {
 		panic("Can't create DEALER socket")
@@ -167,9 +166,7 @@ func (p PeerList) MultiMessageExpectResponse(recipients []string, timeout time.D
 func (p PeerList) RandomNodes(n int) ([]string, int) {
 	slice := make([]string, 0)
 	for k, _ := range p.dealers {
-		if p.Name != k {
-			slice = append(slice, k)
-		}
+		slice = append(slice, k)
 	}
 	for i := range slice {
 		j := rand.Intn(i + 1)
