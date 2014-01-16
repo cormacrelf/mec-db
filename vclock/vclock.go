@@ -177,7 +177,7 @@ func Descends(a, b VClock) bool {
 }
 
 // Determines if A is behind any other clock
-func OutOfDate(clocks []VClock, A VClock) bool {
+func Outdated(A VClock, clocks []VClock) bool {
 	acc := false
 	for _, clock := range clocks {
 		if Compare(A, clock) == -1 {
@@ -189,7 +189,7 @@ func OutOfDate(clocks []VClock, A VClock) bool {
 
 // Takes a map of strings (nodes) to VClocks and returns strings whose clocks
 // are out of date.
-func MapOutOfDate(nodes map[string]VClock) []string {
+func MapOutdated(nodes map[string]VClock) []string {
 	clocks := make([]VClock, len(nodes))
 	i := 0
 	for _, v := range nodes {
@@ -199,7 +199,7 @@ func MapOutOfDate(nodes map[string]VClock) []string {
 	acc := make([]string, len(nodes))
 	i = 0
 	for k, v := range nodes {
-		if OutOfDate(clocks, v) {
+		if Outdated(v, clocks) {
 			acc[i] = k
 			i++
 		}
