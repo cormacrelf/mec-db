@@ -176,6 +176,38 @@ func Descends(a, b VClock) bool {
 	return false
 }
 
+// Determines if A is behind any other clock
+func OutOfDate(clocks []VClock, A VClock) bool {
+	acc := false
+	for _, clock := range clocks {
+		if Compare(A, clock) == -1 {
+			acc = true
+		}
+	}
+	return acc
+}
+
+// Takes a map of strings (nodes) to VClocks and returns strings whose clocks
+// are out of date.
+func MapOutOfDate(nodes map[string]VClock) []string {
+	clocks := make([]VClock, len(nodes))
+	i := 0
+	for _, v := range nodes {
+		clocks[i] = v
+		i++
+	}
+	acc := make([]string, len(nodes))
+	i = 0
+	for k, v := range nodes {
+		if OutOfDate(clocks, v) {
+			acc[i] = k
+			i++
+		}
+	}
+
+	return acc
+}
+
 // Merge a list of clocks and increment own counter
 func MergeSelf(clocks []VClock, self string) VClock {
 	clock := Merge(clocks)
@@ -211,3 +243,4 @@ func Merge(clocks []VClock) VClock {
 
 	return acc
 }
+
