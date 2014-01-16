@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"errors"
 	"fmt"
 	ml "github.com/hashicorp/memberlist"
 	zmq "github.com/pebbe/zmq4"
@@ -87,6 +88,7 @@ func (p PeerList) receive() {
 		// fmt.Printf("%v\n", data[1])
 
 		// fmt.Printf("incoming: %v\n", data)
+		// fmt.Printf("chans: %v\n", p.subs)
 
 		msgtype := data[1]
 		channel := p.subs[msgtype]
@@ -108,14 +110,26 @@ func (p PeerList) Message(recipient string, msg ...string) error {
 	dest := p.dealers[recipient]
 	_, err := dest.SendMessage(msg)
 	if err != nil {
-		fmt.Printf("dealer error %v\n", err)
+		fmt.Printf("dealer send error %v\n", err)
 	}
 	return err
 }
 
-// Send msg to n random nodes from cluster (for a read/write op)
-// Returns number of messages sent (e.g. if n < available members)
-func (p PeerList) SendRandom(n int, msg ...string) int {
+// Send one message and await reply string
+func (p PeerList) MessageExpectResponse(recipient string, msg ...string) ([]string, error) {
+	dest := p.dealers[recipient]
+	_, err := dest.SendMessage(msg)
+	if err != nil {
+		fmt.Printf("dealer send error %v\n", err)
+	}
+	response, err := dest.RecvMessage(0)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("no reponse: %v\n", err))
+	}
+	return response, nil
+}
+
+func (p PeerList) RandomNodes(n int) ([]string, int) {
 	slice := make([]string, 0)
 	for k, _ := range p.dealers {
 		if p.Name != k {
@@ -126,14 +140,48 @@ func (p PeerList) SendRandom(n int, msg ...string) int {
 		j := rand.Intn(i + 1)
 		slice[i], slice[j] = slice[j], slice[i]
 	}
-	if n > len(slice) {
-		n = len(slice)
+
+	return slice, len(slice)
+}
+
+// Send msg to n random nodes from cluster (for a read/write op)
+// Returns number of messages sent (e.g. if n < available members)
+func (p PeerList) SendRandom(n int, msg ...string) int {
+	slice, t := p.RandomNodes(n)
+	if n > t {
+		n = t
 	}
 	for i := 0; i < n; i++ {
 		p.Message(slice[i], msg...)
 	}
 
 	return n
+}
+
+// Verify we have `n` GOOD responses to a message
+// The alternative is an error or a "FAIL"
+func (p PeerList) VerifyRandom(n int, msg ...string) int {
+	slice, t := p.RandomNodes(n)
+	if n > t {
+		n = t
+	}
+
+	acc := 0
+	for i := 0; i < n; i++ {
+		str, err := p.MessageExpectResponse(slice[i], msg...)
+		if len(str) < 1 {
+			// so we don't get any index errors
+			continue
+		}
+		if err != nil || str[0] != "GOOD" {
+			continue
+		}
+		acc += 1
+	}
+
+	// acc <= n <= number of nodes we could find
+	// ideally acc == n
+	return acc
 }
 
 func (p PeerList) Broadcast(msg ...string) int {
