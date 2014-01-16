@@ -196,12 +196,10 @@ func MapOutdated(nodes map[string]VClock) []string {
 		clocks[i] = v
 		i++
 	}
-	acc := make([]string, len(nodes))
-	i = 0
+	acc := make([]string, 0)
 	for k, v := range nodes {
 		if Outdated(v, clocks) {
-			acc[i] = k
-			i++
+			acc = append(acc, k)
 		}
 	}
 
