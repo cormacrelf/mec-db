@@ -225,6 +225,21 @@ func Latest(nodes map[string]VClock) (map[string]VClock) {
 	return latest
 }
 
+func (vc VClock) MaxTimestamp() int64 {
+	max64 := func(a, b int64) int64 {
+		if a > b {
+			return a
+		}
+		return b
+	}
+
+	acc := int64(0)
+	for _, v := range vc {
+		acc = max64(acc, v.Timestamp)
+	}
+	return acc
+}
+
 // AllEqual returns true if every given clock is equal
 func AllEqual(clocks []VClock) bool {
 	for i, v := range clocks {

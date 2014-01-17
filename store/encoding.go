@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/base64"
+	"fmt"
 	"errors"
 	"github.com/cormacrelf/mec-db/vclock"
 	"github.com/ugorji/go/codec"
@@ -140,6 +141,7 @@ func encodeStorable(wr Storable) ([]byte, error) {
 }
 
 func decodeStorable(data []byte) (Storable, error) {
+
 	var mh codec.MsgpackHandle
 	var wr Storable
 	mh.MapType = reflect.TypeOf(wr)
@@ -147,7 +149,7 @@ func decodeStorable(data []byte) (Storable, error) {
 	dec := codec.NewDecoderBytes(data, &mh)
 	err := dec.Decode(&wr)
 	if err != nil {
-		return Storable{}, errors.New("Storable not decoded")
+		return Storable{}, errors.New(fmt.Sprintf("storable not decoded: len:%d: %v\n", len(data), data))
 	}
 
 	return wr, nil
