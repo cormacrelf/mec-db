@@ -32,7 +32,7 @@ func shake(name string, root string) {
 	r.Get(`/mec`, GetRoot)
 	r.Get(`/mec/:key`, Get)
 	r.Post(`/mec/:key`, Post)
-	r.Put(`/mec/:key/:value`, Put)
+	r.Put(`/mec/:key`, Put)
 	r.Delete(`/mec/:key`, Delete)
 	// Add the router action
 	m.Action(r.Handle)

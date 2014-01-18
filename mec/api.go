@@ -73,6 +73,10 @@ func Get(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWr
 }
 
 func Post(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
+	return Put(s, enc, params, res, req)
+}
+
+func Put(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
 	key, _ := params["key"]
 	value, _ := ioutil.ReadAll(req.Body)
 	content_type := req.Header.Get("Content-Type")
@@ -89,9 +93,7 @@ func Post(s *store.Store, enc Encoder, params martini.Params, res http.ResponseW
 
 	return http.StatusOK, ""
 }
-func Put(db *levigo.DB, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
-	return 200, "stub"
-}
+
 func Delete(db *levigo.DB, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
 	return 200, "stub"
 }
@@ -102,5 +104,6 @@ func Delete(db *levigo.DB, enc Encoder, params martini.Params, res http.Response
 // without it.
 func MapEncoder(c martini.Context, res http.ResponseWriter, req *http.Request) {
 	c.MapTo(jsonEncoder{}, (*Encoder)(nil))
-	res.Header().Set("Content-Type", "application/json")
+	// res.Header().Set("Content-Type", "application/json")
 }
+
