@@ -46,7 +46,7 @@ Note that you'll want `port + 1` to be open as well, since MecDB binds an N-to-1
 
 #### API
 
-MecDB offers a HTTP API.
+MecDB offers an HTTP API.
 
 **GET /mec/:key**
 
@@ -54,7 +54,7 @@ Performs a repairing read using R nodes. Gives back the consolidated data and a 
 
 Handles multiple responses for siblings with `300 Multiple Choices`.
 
-**Single Response format**:
+*Single Response format*:
 
 ```
 HTTP/1.1 200 OK
@@ -66,7 +66,7 @@ X-Mec-Vclock: gapjb3JtYWNyZWxmgqdDb3VudGVyAalUaW1lc3RhbXDPE0nH5/H4nFU=
 "I am a machine"
 ```
 
-**Multiple Choice format**:
+*Multiple Choice format*:
 
 When clients A, B, and C have written versions 1-3 respectively, simultaneously on different servers such that they have divergent clocks. Consists of `mime/multipart`-separated responses that each have a Last-Modified and unix-nanosecond timestamp. Only one VClock is returned, which is a descendent of each of the multiple responses such that a client may resolve the conflict by POST/PUTting passing the merged clock and a merged value.
 
