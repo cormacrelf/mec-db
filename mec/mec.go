@@ -14,11 +14,6 @@ import (
 	"os/signal"
 )
 
-// API
-//
-// GET /mec/key		-> 200 Value, 300 Multiple Responses
-// GET
-
 var m *martini.Martini
 var db *levigo.DB
 var list *ml.Memberlist

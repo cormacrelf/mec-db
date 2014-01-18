@@ -52,9 +52,9 @@ MecDB offers a HTTP API.
 
 Performs a repairing read using R nodes. Gives back the consolidated data and a Vector Clock (X-Mec-Vclock) which a client should send when making PUT/POST requests.
 
-Does not yet handle multiple responses for siblings.
+Handles multiple responses for siblings with `300 Multiple Choices`.
 
-Response format:
+**Single Response format**:
 
 ```
 HTTP/1.1 200 OK
@@ -64,6 +64,40 @@ Date: Thu, 16 Jan 2014 08:42:53 GMT
 X-Mec-Vclock: gapjb3JtYWNyZWxmgqdDb3VudGVyAalUaW1lc3RhbXDPE0nH5/H4nFU=
 
 "I am a machine"
+```
+
+**Multiple Choice format**:
+
+When clients A, B, and C have written versions 1-3 respectively, simultaneously on different servers such that they have divergent clocks. Consists of `mime/multipart`-separated responses that each have a Last-Modified and unix-nanosecond timestamp. Only one VClock is returned, which is a descendent of each of the multiple responses such that a client may resolve the conflict by POST/PUTting passing the merged clock and a merged value.
+
+```
+HTTP/1.1 300 Multiple Choices
+Content-Length: 625
+Content-Type: mime/multipart
+Date: Fri, 17 Jan 2014 23:52:51 GMT
+X-Mec-Vclock: g6FDgqdDb3VudGVyAalUaW1lc3RhbXDPE0pH93pICm+hQYKnQ291bnRlcgGpVGltZXN0YW1wzxNKR+q4T3ofoUKCp0NvdW50ZXIBqVRpbWVzdGFtcM8TSkf15mgjww==
+
+--0029149167aa0f3629c99cf2e5e07aa0d87f4843608c765c546776224747
+Content-Type: application/json; charset=utf-8
+Last-Modified: Sat, 18 Jan 2014 10:49:23 GMT
+X-Mec-Timestamp: 1390002563231255151
+
+version 3
+
+--0029149167aa0f3629c99cf2e5e07aa0d87f4843608c765c546776224747
+Content-Type: application/json; charset=utf-8
+Last-Modified: Sat, 18 Jan 2014 10:48:28 GMT
+X-Mec-Timestamp: 1390002508437355039
+
+version 1
+
+--0029149167aa0f3629c99cf2e5e07aa0d87f4843608c765c546776224747
+Content-Type: application/json; charset=utf-8
+Last-Modified: Sat, 18 Jan 2014 10:49:16 GMT
+X-Mec-Timestamp: 1390002556455363523
+
+version 2
+
 ```
 
 **PUT /mec/:key**
