@@ -22,6 +22,13 @@ func parseDataMsg(naked bool, msg ...string) (string, string, string, vclock.VCl
 		ia = 1 // get past ROUTER's routing data
 	}
 
+	if len(msg) == 0 {
+		return "", "", "", nil, errors.New("zero-length message")
+	}
+	if len(msg) < 5 {
+		return "", "", "", nil, errors.New("failed to parse message")
+	}
+
 	// key,	   value,  VClock
 	// string, string, []byte  ... msg[ia] == "WRITE"
 	key, value, content_type, b := msg[ia+1], msg[ia+2], msg[ia+3], []byte(msg[ia+4])
