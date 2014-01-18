@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"bytes"
@@ -15,11 +15,11 @@ import (
 
 // The MecDB embedded martini webserver
 
-func GetRoot(db *levigo.DB, enc Encoder, params martini.Params) (int, string) {
+func GetRoot(db *levigo.DB, params martini.Params) (int, string) {
 	return 200, "stub"
 }
 
-func Get(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) {
+func Get(s *store.Store, params martini.Params, res http.ResponseWriter, req *http.Request) {
 	key, _ := params["key"]
 	client := req.Header.Get("X-Mec-Client-ID")
 	maybe, b64, err := s.APIRead(key, client)
@@ -72,11 +72,11 @@ func Get(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWr
 	return
 }
 
-func Post(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
+func Post(s *store.Store, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
 	return Put(s, enc, params, res, req)
 }
 
-func Put(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
+func Put(s *store.Store, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
 	key, _ := params["key"]
 	value, _ := ioutil.ReadAll(req.Body)
 	content_type := req.Header.Get("Content-Type")
@@ -85,8 +85,7 @@ func Put(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWr
 
 	b64, err := s.APIWrite(key, string(value), content_type, client, vclock)
 	if err != nil {
-		return http.StatusNotFound, Must(enc.Encode(
-			NewError(ErrCodeNotExist, fmt.Sprintf("write failed to key '%s'", params["key"]))))
+		return StatusInternalServerError, fmt.Sprintf("write failed to key '%s'", params["key"])
 	}
 
 	res.Header().Set("X-Mec-Vclock", b64)
@@ -94,8 +93,8 @@ func Put(s *store.Store, enc Encoder, params martini.Params, res http.ResponseWr
 	return http.StatusOK, ""
 }
 
-func Delete(db *levigo.DB, enc Encoder, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
-	return 200, "stub"
+func Delete(db *levigo.DB, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
+	return 501, ""
 }
 
 // MapEncoder intercepts the request's URL, detects the requested format,
@@ -103,7 +102,7 @@ func Delete(db *levigo.DB, enc Encoder, params martini.Params, res http.Response
 // the URL to remove the format extension, so that routes can be defined
 // without it.
 func MapEncoder(c martini.Context, res http.ResponseWriter, req *http.Request) {
-	c.MapTo(jsonEncoder{}, (*Encoder)(nil))
+	// c.MapTo(jsonEncoder{}, (*Encoder)(nil))
 	// res.Header().Set("Content-Type", "application/json")
 }
 

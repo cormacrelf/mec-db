@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/codegangsta/martini"
+	"github.com/cormacrelf/mec-db/api"
 	"github.com/cormacrelf/mec-db/peers"
 	"github.com/cormacrelf/mec-db/store"
 	ml "github.com/hashicorp/memberlist"
@@ -25,15 +26,14 @@ func shake(name string, root string) {
 	// Setup middleware
 	m.Use(martini.Recovery())
 	m.Use(martini.Logger())
-    m.Use(MapEncoder)
 
 	// Setup routes
 	r := martini.NewRouter()
-	r.Get(`/mec`, GetRoot)
-	r.Get(`/mec/:key`, Get)
-	r.Post(`/mec/:key`, Post)
-	r.Put(`/mec/:key`, Put)
-	r.Delete(`/mec/:key`, Delete)
+	r.Get(`/mec`, api.GetRoot)
+	r.Get(`/mec/:key`, api.Get)
+	r.Post(`/mec/:key`, api.Post)
+	r.Put(`/mec/:key`, api.Put)
+	r.Delete(`/mec/:key`, api.Delete)
 	// Add the router action
 	m.Action(r.Handle)
 
