@@ -70,11 +70,16 @@ func (w Store) Listen() {
 			// Respond to GET messages with FAIL or DATA
 			key := parseGetMsg(false, msg...)
 			value, content_type, vc, err := w.DBRead(key)
-			r, err := encodeDataMsg("DATA", key, value, content_type, vc)
-			reply := append([]string{msg[0]}, r...)
 			if err != nil {
 				w.pl.Reply(msg[0], "FAIL")
+				continue
 			}
+			r, err := encodeDataMsg("DATA", key, value, content_type, vc)
+			if err != nil {
+				w.pl.Reply(msg[0], "FAIL")
+				continue
+			}
+			reply := append([]string{msg[0]}, r...)
 			w.pl.Reply(reply...)
 		}
 	}
