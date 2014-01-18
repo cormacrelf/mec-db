@@ -132,7 +132,7 @@ func (p PeerList) MessageExpectResponse(recipient string, timeout time.Duration,
 }
 
 // Send multiple messages and await replies with a global timeout
-func (p PeerList) MultiMessageExpectResponse(recipients []string, timeout time.Duration, msg ...string) (map[string][]string) {
+func (p PeerList) MultiMessageExpectResponse(recipients []string, timeout time.Duration, msg ...string) map[string][]string {
 	done := make(chan bool)
 	acc := make(map[string][]string)
 	for _, r := range recipients {
@@ -141,6 +141,7 @@ func (p PeerList) MultiMessageExpectResponse(recipients []string, timeout time.D
 		remote.SendMessage(msg)
 		go func(){
 			msg, err := remote.RecvMessage(0)
+			// fmt.Println("recvmsg: ", msg)
 			if err == nil {
 				acc[r] = msg
 			}
@@ -148,7 +149,7 @@ func (p PeerList) MultiMessageExpectResponse(recipients []string, timeout time.D
 		}()
 	}
 
-	for i:=0; i < len(recipients); i++ {
+	for i := 0; i < len(recipients); i++ {
 		<-done
 	}
 
@@ -192,7 +193,7 @@ func (p PeerList) VerifyRandom(n int, msg ...string) int {
 
 	acc := 0
 	for i := 0; i < n; i++ {
-		str, err := p.MessageExpectResponse(slice[i], 500 * time.Millisecond, msg...)
+		str, err := p.MessageExpectResponse(slice[i], 500*time.Millisecond, msg...)
 		if len(str) < 1 {
 			// so we don't get any index errors
 			continue
@@ -215,7 +216,7 @@ func (p PeerList) RandomResponses(n int, msg ...string) (map[string][]string, in
 		n = t
 	}
 
-	responses := p.MultiMessageExpectResponse(slice[:n], 5000 * time.Millisecond, msg...)
+	responses := p.MultiMessageExpectResponse(slice[:n], 5000*time.Millisecond, msg...)
 
 	// len(responses) <= n <= number of available clients
 	return responses, len(responses)

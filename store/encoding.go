@@ -2,8 +2,8 @@ package store
 
 import (
 	"encoding/base64"
-	"fmt"
 	"errors"
+	"fmt"
 	"github.com/cormacrelf/mec-db/vclock"
 	"github.com/ugorji/go/codec"
 	"reflect"
@@ -65,7 +65,7 @@ func encodeWriteMsg(key, value, content_type string, vc vclock.VClock) ([]string
 }
 
 // Takes message parts and returns key
-func parseGetMsg(naked bool, msg ...string) (string) {
+func parseGetMsg(naked bool, msg ...string) string {
 	var ia int
 	if naked {
 		ia = 0
@@ -78,7 +78,7 @@ func parseGetMsg(naked bool, msg ...string) (string) {
 }
 
 // Encode GET message parts into sendable zeromq message
-func encodeGetMsg(key string) ([]string) {
+func encodeGetMsg(key string) []string {
 	msg := make([]string, 2)
 	msg[0], msg[1] = "GET", key
 
