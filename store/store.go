@@ -1,8 +1,8 @@
 package store
 
 import (
-	"errors"
 	"fmt"
+	api "github.com/cormacrelf/mec-db/api/apierrors"
 	"github.com/cormacrelf/mec-db/peers"
 	"github.com/cormacrelf/mec-db/vclock"
 	"github.com/jmhodges/levigo"
@@ -86,7 +86,7 @@ func (w Store) Listen() {
 }
 
 // APIWrite takes a client request and distributes it to itself and W-1 servers.
-func (s Store) APIWrite(key, value, content_type, client_id, packed_vclock string) (string, error) {
+func (s Store) APIWrite(key, value, content_type, client_id, packed_vclock string) (string, *api.Error) {
 	vc, err := parseVClock(packed_vclock)
 	if err != nil {
 		// handle the bad VClock input by making a new one
@@ -95,28 +95,30 @@ func (s Store) APIWrite(key, value, content_type, client_id, packed_vclock strin
 
 	vc.Increment(client_id)
 
-	err = s.DistributeWrite(key, value, content_type, vc)
-	if err != nil {
+	err_write := s.DistributeWrite(key, value, content_type, vc)
+	if err_write != nil {
 		// nothing happened, give back the original clock
-		return packed_vclock, err
+		return packed_vclock, err_write
 	}
 
 	b64, err := encodeVClock(vc)
 	if err != nil {
-		return packed_vclock, err
+		return packed_vclock, nil
 	}
 
-	return b64, nil
+	return b64, nil // default OK response returned.
 }
 
-func (s Store) DistributeWrite(key, value, content_type string, vc vclock.VClock) error {
+func (s Store) DistributeWrite(key, value, content_type string, vc vclock.VClock) *api.Error {
 	msg, err := encodeWriteMsg(key, value, content_type, vc)
 	if err != nil {
-		return err // fail here so we don't send unintelligible messages
+		return api.NewError(api.StatusBadGateway, "couldn't distribute write")
+		// fail here so we don't send unintelligible messages
 	}
 	n := s.pl.VerifyRandom(W, msg...)
-	if n < W {
-		return errors.New("not enough successful writes")
+	if n == 0 {
+		return api.NewError(api.StatusBadGateway, "no successful writes")
+		// if we at least get one, treat that as a success.
 	}
 	return nil
 }
@@ -144,6 +146,13 @@ type ReadValue struct {
 	Timestamp    int64
 }
 
+func (r ReadValue) EqualTo(other ReadValue) bool {
+	if r.Value == other.Value && r.Content_Type == other.Content_Type {
+		return true
+	}
+	return false
+}
+
 type MaybeMulti struct {
 	Multi    bool
 	Single   ReadValue   // if Multi then == nil
@@ -151,7 +160,7 @@ type MaybeMulti struct {
 }
 
 // APIRead returns value for key + a base64-encoded VClock
-func (s Store) APIRead(key, client_id string) (MaybeMulti, string, error) {
+func (s Store) APIRead(key, client_id string) (MaybeMulti, string, *api.Error) {
 	maybe, vc, err_read := s.DistributeRead(key)
 	b64, err := encodeVClock(vc)
 	if err_read != nil {
@@ -159,37 +168,54 @@ func (s Store) APIRead(key, client_id string) (MaybeMulti, string, error) {
 	}
 	if err != nil {
 		b64, _ = encodeVClock(vclock.Fresh())
-		return maybe, b64, err
+		return maybe, b64, nil
 	}
 
 	return maybe, b64, nil
 }
 
 // Performs a Read-Repair on the key and returns a merged value
-func (s Store) DistributeRead(key string) (MaybeMulti, vclock.VClock, error) {
+func (s Store) DistributeRead(key string) (MaybeMulti, vclock.VClock, *api.Error) {
 	msg := encodeGetMsg(key)
-	responses, n := s.pl.RandomResponses(R, msg...)
-	if n < R {
-		if n >= 1 {
-			for _, v := range responses {
-				_, value, content_type, clock, err := parseDataMsg(false, v...)
-				if err != nil {
-					continue
-				}
-				return MaybeMulti{false, ReadValue{value, content_type, clock.MaxTimestamp()}, nil}, clock, errors.New("found data but repair failed")
-				break
-			}
-		}
-		return MaybeMulti{}, nil, errors.New(fmt.Sprintf("not enough successful reads: %d", n))
-	}
-	data := make(map[string]ReadValue, n)         // map responses to returnable values
-	clockmap := make(map[string]vclock.VClock, n) // map responses to vclocks
+	responses, _ := s.pl.RandomResponses(R, msg...)
+
+	data := make(map[string]ReadValue, 0)         // map responses to returnable values
+	clockmap := make(map[string]vclock.VClock, 0) // map responses to vclocks
 
 	// take vclock for each response into clockmap
 	for k, msg := range responses {
-		_, v, c, vc, _ := parseDataMsg(true, msg...)
+		// don't keep failed responses around
+		_, v, c, vc, err := parseDataMsg(true, msg...)
+		if msg[0] == "FAIL" || err != nil {
+			delete(responses, k)
+			continue
+		}
 		clockmap[k] = vc
 		data[k] = ReadValue{v, c, vc.MaxTimestamp()}
+	}
+
+	// reassign to number of SUCCESSFUL responses.
+	n := len(responses)
+
+	if n == 0 {
+		return MaybeMulti{}, nil, api.NewError(api.StatusNotFound, "no successful reads")
+	}
+
+	if n == 1 {
+		var v []string
+		for _, a := range responses {
+			v = a
+		}
+		_, value, content_type, clock, err := parseDataMsg(false, v...)
+		if err != nil {
+			return MaybeMulti{}, nil, api.NewError(api.StatusNotFound, "no successful reads")
+		}
+		single := MaybeMulti{
+			false,
+			ReadValue{value, content_type, clock.MaxTimestamp()},
+			nil,
+		}
+		return single, clock, nil // it's not an error when there's only one DB
 	}
 
 	// get map of responses to the latest (potentially sibling) clocks
@@ -207,36 +233,56 @@ func (s Store) DistributeRead(key string) (MaybeMulti, vclock.VClock, error) {
 		// get a merged clock to return to client
 		merged := vclock.Merge(clocks)
 		// get a list of returnable values in admittedly random order
-		returnables := make([]ReadValue, len(latest))
+		reads := make([]ReadValue, len(latest))
 		i := 0
 		for k, _ := range latest {
-			returnables[i] = data[k]
+			reads[i] = data[k]
 			i++
 		}
+		returnables := make([]ReadValue, 0)
+		returnables = append(returnables, reads[0])
+		for i, a := range reads[:len(reads) - 1] {
+			for _, b := range reads[i+1:] {
+				if !a.EqualTo(b) {
+					returnables = append(returnables, b)
+				}
+			}
+		}
 
-		return MaybeMulti{Multi: true, Single: ReadValue{}, Multiple: returnables}, merged, nil
+		multi := MaybeMulti{Multi: true, Single: ReadValue{}, Multiple: returnables}
+		return multi, merged, nil
 	} else {
-		// now we have a list of equivalent clocks, pick one
+		// now we have a list of equivalent, up-to-date clocks, pick one
 		var (
-			nodename string
-			clock    vclock.VClock
+			nodename                 string
+			key, value, content_type string
+			err						 error
+			clock                    vclock.VClock
 		)
+
+		// assign values to our good response
+		i := len(latest)
 		for k, v := range latest {
 			nodename, clock = k, v
+			key, value, content_type, _, err = parseDataMsg(true, responses[nodename]...)
+			if err != nil {
+				if i == len(latest) {
+					// basically we really screwed up to get this far
+					return MaybeMulti{}, nil, api.NewError(api.StatusInternalServerError, "unparseable reads")
+				}
+				continue
+			}
 		}
 
 		outdated := vclock.MapOutdated(clockmap)
 
-		key, value, content_type, _, err := parseDataMsg(true, responses[nodename]...)
-		if err != nil {
-			return MaybeMulti{}, nil, errors.New("unparseable")
-		}
+		// this is our 'good response'
 		for i, node := range outdated {
 
 			msg, err := encodeWriteMsg(key, value, content_type, clock)
 			if err != nil {
 				if i == len(outdated) {
-					return MaybeMulti{}, nil, errors.New("unparseable")
+					return MaybeMulti{}, nil, api.NewError(500, "unparseable")
 				}
 				continue
 			}
@@ -262,12 +308,10 @@ func (s Store) DistributeRead(key string) (MaybeMulti, vclock.VClock, error) {
 func (s Store) DBRead(key string) (string, string, vclock.VClock, error) {
 	obj, err := s.db.Get(s.ro, []byte(key))
 	if err != nil {
-		fmt.Printf("read failed: %v", err)
 		return "", "", nil, err
 	}
 	st, err := decodeStorable(obj)
 	if err != nil {
-		fmt.Printf("value decode failed: %v", err)
 		return "", "", nil, err
 	}
 
