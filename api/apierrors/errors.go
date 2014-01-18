@@ -1,4 +1,4 @@
-package api
+package apierrors
 
 import (
 	"fmt"
@@ -32,10 +32,6 @@ type Error struct {
 	Code int
 }
 
-func (e *Error) Error() string {
-	return fmt.Sprintf("[%d] %s", e.Code, e.Error())
-}
-
 // Codify augments an error instance with the specified code
 func Codify(code int, err error) *Error {
 	return &Error{
@@ -45,9 +41,19 @@ func Codify(code int, err error) *Error {
 }
 
 // New creates a new Error instance with the code and message
-func New(code int, msg string) *Error {
+func NewError(code int, msg string) *Error {
 	return &Error{
 		errors.New(msg),
 		code,
 	}
 }
+
+// New creates a new Error instance with the code and message
+func NewErrorFmt(code int, format string, msg ...interface {}) *Error {
+	mes := fmt.Sprintf(format, msg...)
+	return &Error{
+		errors.New(mes),
+		code,
+	}
+}
+

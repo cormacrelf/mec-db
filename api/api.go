@@ -22,6 +22,7 @@ func GetRoot(db *levigo.DB, params martini.Params) (int, string) {
 func Get(s *store.Store, params martini.Params, res http.ResponseWriter, req *http.Request) {
 	key, _ := params["key"]
 	client := req.Header.Get("X-Mec-Client-ID")
+
 	maybe, b64, err := s.APIRead(key, client)
 	res.Header().Set("X-Mec-Vclock", b64)
 
@@ -30,7 +31,7 @@ func Get(s *store.Store, params martini.Params, res http.ResponseWriter, req *ht
 		res.Header().Set("Content-Type", rv.Content_Type)
 		t := time.Unix(0, rv.Timestamp)
 		res.Header().Set("Last-Modified", t.Format(http.TimeFormat))
-		res.Header().Set("X-Mec-Timestamp", fmt.Sprintf("%d",rv.Timestamp))
+		res.Header().Set("X-Mec-Timestamp", fmt.Sprintf("%d", rv.Timestamp))
 		res.WriteHeader(http.StatusOK)
 		res.Write([]byte(rv.Value))
 		return
@@ -45,7 +46,7 @@ func Get(s *store.Store, params martini.Params, res http.ResponseWriter, req *ht
 			header.Set("Content-Type", rv.Content_Type)
 			t := time.Unix(0, rv.Timestamp)
 			header.Set("Last-Modified", t.Format(http.TimeFormat))
-			header.Set("X-Mec-Timestamp", fmt.Sprintf("%d",rv.Timestamp))
+			header.Set("X-Mec-Timestamp", fmt.Sprintf("%d", rv.Timestamp))
 			iow, errc := writer.CreatePart(header)
 			if errc != nil {
 				continue
@@ -62,7 +63,7 @@ func Get(s *store.Store, params martini.Params, res http.ResponseWriter, req *ht
 	if err != nil {
 		// return http.StatusNotFound, Must(enc.Encode(
 		// 	NewError(ErrCodeNotExist, fmt.Sprintf("key %s does not exist", params["key"]))))
-		res.WriteHeader(500)
+		res.WriteHeader(err.Code)
 		res.Write([]byte(err.Error()))
 		return
 	}
@@ -73,7 +74,7 @@ func Get(s *store.Store, params martini.Params, res http.ResponseWriter, req *ht
 }
 
 func Post(s *store.Store, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
-	return Put(s, enc, params, res, req)
+	return Put(s, params, res, req)
 }
 
 func Put(s *store.Store, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
@@ -85,7 +86,7 @@ func Put(s *store.Store, params martini.Params, res http.ResponseWriter, req *ht
 
 	b64, err := s.APIWrite(key, string(value), content_type, client, vclock)
 	if err != nil {
-		return StatusInternalServerError, fmt.Sprintf("write failed to key '%s'", params["key"])
+		return err.Code, err.Error()
 	}
 
 	res.Header().Set("X-Mec-Vclock", b64)
@@ -105,4 +106,3 @@ func MapEncoder(c martini.Context, res http.ResponseWriter, req *http.Request) {
 	// c.MapTo(jsonEncoder{}, (*Encoder)(nil))
 	// res.Header().Set("Content-Type", "application/json")
 }
-
