@@ -10,6 +10,7 @@ import (
 	"github.com/jmhodges/levigo"
 	"io/ioutil"
 	"net/http"
+	"runtime"
 	"time"
 	"os"
 	"os/signal"
@@ -135,6 +136,8 @@ func main() {
 
 
 	// http listens on 'serve' port
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	fmt.Println(runtime.GOMAXPROCS(0))
 	err := http.ListenAndServe(fmt.Sprintf(":%d", config.HTTPPort), m)
 	if err != nil {
 		fmt.Printf("failed to create server: %v", err)

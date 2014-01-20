@@ -44,11 +44,11 @@ func Create(db *levigo.DB, pl *peers.PeerList) *Store {
 	return &s
 }
 
-func (w Store) Listen() {
+func (w *Store) Listen() {
 	writes := make(chan []string, 1000)
-	w.pl.Subscribe(writes, "WRITE")
+	(*w).pl.Subscribe(writes, "WRITE")
 	gets := make(chan []string, 1000)
-	w.pl.Subscribe(gets, "GET")
+	(*w).pl.Subscribe(gets, "GET")
 	for {
 		select {
 		case msg := <-writes:
@@ -206,7 +206,7 @@ func (s Store) DistributeRead(key string) (MaybeMulti, vclock.VClock, *api.Error
 		for _, a := range responses {
 			v = a
 		}
-		_, value, content_type, clock, err := parseDataMsg(false, v...)
+		_, value, content_type, clock, err := parseDataMsg(true, v...)
 		if err != nil {
 			return MaybeMulti{}, nil, api.NewError(api.StatusNotFound, "no successful reads")
 		}
