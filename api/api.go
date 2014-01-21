@@ -80,6 +80,7 @@ func Post(s *store.Store, params martini.Params, res http.ResponseWriter, req *h
 func Put(s *store.Store, params martini.Params, res http.ResponseWriter, req *http.Request) (int, string) {
 	key, _ := params["key"]
 	value, _ := ioutil.ReadAll(req.Body)
+	req.Body.Close()
 	content_type := req.Header.Get("Content-Type")
 	client := req.Header.Get("X-Mec-Client-ID")
 	vclock := req.Header.Get("X-Mec-Vclock")
