@@ -334,8 +334,8 @@ func (p PeerList) VerifyRandom(n int, msg ...string) int {
 	acc := 0
 	res := make(Expecter)
 	for i := 0; i < n; i++ {
-		res <- append([]string{slice[i]}, msg...)
 		p.expect <- &res
+		res <- append([]string{slice[i]}, msg...)
 		str := <-res
 		if len(str) < 1 {
 			// so we don't get any index errors
