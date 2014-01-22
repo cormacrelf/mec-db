@@ -9,20 +9,36 @@ var funcs map[string][]time.Duration = make(map[string][]time.Duration)
 var starts map[string]time.Time = make(map[string]time.Time)
 var blips map[string][]time.Time = make(map[string][]time.Time)
 
-func Trace(s string) (string, time.Time) {
-	return s, time.Now()
+// Time a single function over every execution or just one
+//     func() {
+//         defer p.Avg(p.Profile("identifier"))
+//         defer p.Single(p.Profile("identifier"))
+//         // code to be profiled
+//     }
+func Profile(s string) (string, time.Time) {
+    return s, time.Now()
 }
 
-func Un(s string, startTime time.Time) {
+func Avg(s string, startTime time.Time) {
 	endTime := time.Now()
 	funcs[s] = append(funcs[s], endTime.Sub(startTime))
 }
 
+func Single(s string, startTime time.Time) {
+    endTime := time.Now()
+	fmt.Printf("%s: %v", s, endTime.Sub(startTime))
+}
+
+// Useful for timing inside loops or over sections of a function
+//
+// Use the same identifier to stop
+//     p.Start("identifier")
+//     p.Stop("identifier")
 func Start(s string) {
 	starts[s] = time.Now()
 }
 
-func End(s string) {
+func Stop(s string) {
 	if val,ok := starts[s]; ok {
 		endTime := time.Now()
 		funcs[s] = append(funcs[s], endTime.Sub(val))
