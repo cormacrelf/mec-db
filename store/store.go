@@ -6,7 +6,6 @@ import (
 	"github.com/cormacrelf/mec-db/peers"
 	"github.com/cormacrelf/mec-db/vclock"
 	"github.com/jmhodges/levigo"
-	"time"
 )
 
 // handles
@@ -287,7 +286,7 @@ func (s Store) DistributeRead(key string) (MaybeMulti, vclock.VClock, *api.Error
 				continue
 			}
 
-			go s.pl.MessageExpectResponse(node, time.Second, msg...)
+			go s.pl.MessageExpectResponse(node, msg...)
 			// If they are unable to repair...
 			// Who cares? That's not my fault.
 		}

@@ -279,12 +279,12 @@ func (p PeerList) Message(recipient string, msg ...string) error {
 }
 
 // Send one message and await reply string
-func (p PeerList) MessageExpectResponse(recipient string, timeout time.Duration, msg ...string) ([]string, error) {
+func (p PeerList) MessageExpectResponse(recipient string, msg ...string) ([]string) {
 	res := make(Expecter)
-	res <- append([]string{recipient}, msg...)
 	p.expect <- &res
+	res <- append([]string{recipient}, msg...)
 	str := <-res
-	return str, nil
+	return str
 }
 
 // Send multiple messages and await replies with a global timeout
@@ -332,11 +332,8 @@ func (p PeerList) VerifyRandom(n int, msg ...string) int {
 	}
 
 	acc := 0
-	res := make(Expecter)
 	for i := 0; i < n; i++ {
-		p.expect <- &res
-		res <- append([]string{slice[i]}, msg...)
-		str := <-res
+		str := p.MessageExpectResponse(slice[i], msg...)
 		if len(str) < 1 {
 			// so we don't get any index errors
 			continue
